@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, LogIn, CheckCircle, Bell, User as UserIcon, Database } from 'lucide-react';
 import {
+  DEFAULT_COMPANY_SETTINGS,
   INITIAL_EXPORTED_GOODS,
   INITIAL_LABOR_LOGS,
   INITIAL_MATERIALS,
@@ -8,6 +9,7 @@ import {
   INITIAL_STAFF,
 } from './data/mockData';
 import {
+  CompanySettings,
   ConstructionProject,
   ExportedGood,
   LaborDailyLog,
@@ -22,6 +24,8 @@ import {
   subscribeExportedGoods,
   subscribeLaborLogs,
   subscribeStaff,
+  subscribeCompanySettings,
+  saveCompanySettingsToFirestore,
   addProjectToFirestore,
   deleteProjectFromFirestore,
   addMaterialToFirestore,
@@ -60,6 +64,17 @@ export default function App() {
   const [projects, setProjects] = useState<ConstructionProject[]>([]);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [companySettings, setCompanySettings] = useState<CompanySettings>(() => {
+    const saved = localStorage.getItem('chongtham36_company_settings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return DEFAULT_COMPANY_SETTINGS;
+      }
+    }
+    return DEFAULT_COMPANY_SETTINGS;
+  });
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
 
   // Modals state
@@ -115,16 +130,31 @@ export default function App() {
       setStaff(data || []);
     });
 
+    const unsubCompanySettings = subscribeCompanySettings((data) => {
+      if (data) {
+        setCompanySettings(data);
+        localStorage.setItem('chongtham36_company_settings', JSON.stringify(data));
+      }
+    });
+
     return () => {
       unsubProjects();
       unsubMaterials();
       unsubExports();
       unsubLabor();
       unsubStaff();
+      unsubCompanySettings();
     };
   }, []);
 
   // Handlers
+  const handleUpdateCompanySettings = async (newSettings: CompanySettings) => {
+    setCompanySettings(newSettings);
+    localStorage.setItem('chongtham36_company_settings', JSON.stringify(newSettings));
+    await saveCompanySettingsToFirestore(newSettings);
+    showToast('Đã lưu cấu hình doanh nghiệp và logo thành công!');
+  };
+
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
     setActiveTab('dashboard');
@@ -233,7 +263,10 @@ export default function App() {
           </button>
         </div>
 
-        <LoginScreen onLoginSuccess={handleLoginSuccess} />
+        <LoginScreen
+          onLoginSuccess={handleLoginSuccess}
+          companySettings={companySettings}
+        />
 
         {toastMessage && (
           <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl text-xs flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
@@ -262,6 +295,7 @@ export default function App() {
         onOpenNewProject={() => setIsNewProjectOpen(true)}
         onLogout={handleLogout}
         currentUser={currentUser}
+        companySettings={companySettings}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         onOpenSupportModal={() => setIsSupportOpen(true)}
@@ -377,6 +411,8 @@ export default function App() {
           {activeTab === 'settings' && (
             <SettingsView
               currentUser={currentUser}
+              companySettings={companySettings}
+              onUpdateCompanySettings={handleUpdateCompanySettings}
               onClearAllData={handleClearAllData}
             />
           )}

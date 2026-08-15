@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { LogIn, User, Lock, Eye, EyeOff, Building2, Check, AlertCircle } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
-import { UserAccount } from '../types';
+import { CompanySettings, UserAccount } from '../types';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: UserAccount) => void;
+  companySettings?: CompanySettings;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, companySettings }) => {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('123456');
-  const [orgId, setOrgId] = useState('CT36');
+  const [orgId, setOrgId] = useState(companySettings?.orgId || 'CT36');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +19,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [showForgotModal, setShowForgotModal] = useState(false);
 
   const orgSuggestions = [
-    { id: 'CT36', label: 'CT36 (Trường Sơn 36)', name: 'Công Ty Trường Sơn - Waterproofing 36' },
+    { id: companySettings?.orgId || 'CT36', label: `${companySettings?.orgId || 'CT36'} (${companySettings?.brandName || 'Trường Sơn 36'})`, name: companySettings?.orgName || 'Công Ty Trường Sơn - Waterproofing 36' },
     { id: 'MN01', label: 'MN01 (Trường Sơn MN)', name: 'Chi Nhánh Trường Sơn Miền Nam' },
     { id: 'HN01', label: 'HN01 (Trường Sơn HN)', name: 'Chi Nhánh Trường Sơn Hà Nội' },
   ];
@@ -83,12 +84,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         <div className="flex flex-col items-center text-center mb-6">
           <div className="mb-3 relative group">
             <div className="p-2.5 rounded-full bg-white/95 shadow-2xl ring-4 ring-white/30 backdrop-blur-xs flex items-center justify-center">
-              <BrandLogo size="lg" showText={false} className="w-20 h-20 sm:w-24 sm:h-24" />
+              <BrandLogo
+                size="lg"
+                showText={false}
+                customLogoUrl={companySettings?.customLogoUrl}
+                brandName={companySettings?.brandName}
+                className="w-20 h-20 sm:w-24 sm:h-24"
+              />
             </div>
           </div>
 
           <h2 className="text-sm font-black tracking-widest text-blue-100 uppercase drop-shadow-sm font-['Plus_Jakarta_Sans',sans-serif]">
-            TRUONG SON COMPANY
+            {companySettings?.brandName || 'TRUONG SON COMPANY'}
           </h2>
 
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-wider text-white uppercase drop-shadow-sm font-['Plus_Jakarta_Sans',sans-serif] mt-0.5">
@@ -96,7 +103,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </h1>
 
           <p className="text-white/85 text-xs sm:text-sm font-normal mt-1 max-w-xs sm:max-w-sm leading-relaxed px-2">
-            Hệ Thống Quản Lý Thi Công & Vật Tư Đa Doanh Nghiệp
+            {companySettings?.tagline || 'Hệ Thống Quản Lý Thi Công & Vật Tư Đa Doanh Nghiệp'}
           </p>
         </div>
 

@@ -57,3 +57,15 @@ export interface StaffMember {
   exp: string;
   status: string;
 }
+
+export interface CompanySettings {
+  orgId: string;
+  orgName: string;
+  brandName: string;
+  tagline: string;
+  phone: string;
+  email: string;
+  address: string;
+  taxCode: string;
+  customLogoUrl: string | null;
+}

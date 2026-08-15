@@ -12,7 +12,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
-import { UserAccount } from '../types';
+import { CompanySettings, UserAccount } from '../types';
 
 export type NavTab = 'dashboard' | 'projects' | 'materials' | 'staff' | 'settings';
 
@@ -22,6 +22,7 @@ interface SidebarProps {
   onOpenNewProject: () => void;
   onLogout: () => void;
   currentUser: UserAccount | null;
+  companySettings?: CompanySettings;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   onOpenSupportModal: () => void;
@@ -33,6 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenNewProject,
   onLogout,
   currentUser,
+  companySettings,
   isOpenMobile,
   onCloseMobile,
   onOpenSupportModal,
@@ -67,11 +69,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="p-4 pb-5 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <div className="p-1 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs flex items-center justify-center flex-shrink-0">
-                <BrandLogo size="md" className="w-9 h-9" />
+                <BrandLogo
+                  size="md"
+                  customLogoUrl={companySettings?.customLogoUrl}
+                  brandName={companySettings?.brandName}
+                  className="w-9 h-9"
+                />
               </div>
               <div className="min-w-0">
                 <span className="text-[10px] font-black text-blue-700 tracking-wider uppercase block leading-none truncate font-['Plus_Jakarta_Sans',sans-serif]">
-                  Trường Sơn Co.
+                  {companySettings?.brandName || 'Trường Sơn Co.'}
                 </span>
                 <h1 className="text-sm font-bold text-slate-900 leading-tight flex items-center gap-1 font-['Plus_Jakarta_Sans',sans-serif] mt-0.5 truncate">
                   Waterproofing <span className="text-[#0c5ec7]">36</span>
@@ -94,8 +101,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {currentUser && (
             <div className="px-4 pt-3 pb-1">
               <div className="px-3 py-1.5 rounded-lg bg-blue-50/70 border border-blue-100/60 text-[11px] flex items-center justify-between text-slate-600">
-                <span className="font-semibold text-blue-700">{currentUser.orgId}</span>
-                <span className="truncate ml-2 text-slate-500 font-medium">{currentUser.orgName}</span>
+                <span className="font-semibold text-blue-700">{companySettings?.orgId || currentUser.orgId}</span>
+                <span className="truncate ml-2 text-slate-500 font-medium">{companySettings?.orgName || currentUser.orgName}</span>
               </div>
             </div>
           )}

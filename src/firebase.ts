@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import {
+  CompanySettings,
   ConstructionProject,
   ExportedGood,
   LaborDailyLog,
@@ -22,6 +23,7 @@ import {
   StaffMember,
 } from './types';
 import {
+  DEFAULT_COMPANY_SETTINGS,
   INITIAL_EXPORTED_GOODS,
   INITIAL_LABOR_LOGS,
   INITIAL_MATERIALS,
@@ -255,6 +257,29 @@ export async function deleteStaffFromFirestore(staffId: string) {
     await deleteDoc(doc(db, 'staff', staffId));
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `staff/${staffId}`);
+  }
+}
+
+// Company Settings (Organization profile & Custom Logo)
+export function subscribeCompanySettings(onData: (settings: CompanySettings) => void): Unsubscribe {
+  return onSnapshot(
+    doc(db, 'systemConfig', 'company'),
+    (snap) => {
+      if (snap.exists()) {
+        onData(snap.data() as CompanySettings);
+      }
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.GET, 'systemConfig/company');
+    }
+  );
+}
+
+export async function saveCompanySettingsToFirestore(settings: CompanySettings) {
+  try {
+    await setDoc(doc(db, 'systemConfig', 'company'), settings, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'systemConfig/company');
   }
 }
 
