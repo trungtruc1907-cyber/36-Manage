@@ -1,0 +1,276 @@
+import React, { useState } from 'react';
+import { Menu, LogIn, CheckCircle, Bell, User as UserIcon } from 'lucide-react';
+import {
+  INITIAL_EXPORTED_GOODS,
+  INITIAL_LABOR_LOGS,
+  INITIAL_MATERIALS,
+  INITIAL_PROJECTS,
+} from './data/mockData';
+import { ConstructionProject, ExportedGood, LaborDailyLog, MaterialItem, UserAccount } from './types';
+import { LoginScreen } from './components/LoginScreen';
+import { Sidebar, NavTab } from './components/Sidebar';
+import { DashboardView } from './components/DashboardView';
+import { ProjectsView } from './components/ProjectsView';
+import { MaterialsView } from './components/MaterialsView';
+import { StaffView } from './components/StaffView';
+import { SettingsView } from './components/SettingsView';
+import { NewProjectModal } from './components/NewProjectModal';
+import { NewExportModal } from './components/NewExportModal';
+import { LaborDetailModal } from './components/LaborDetailModal';
+import { SupportModal } from './components/SupportModal';
+
+export default function App() {
+  // Authentication state - starts with demo logged in or login screen
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+
+  // Active navigation tab
+  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+
+  // Mobile sidebar drawer state
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Core business data states
+  const [exportedGoods, setExportedGoods] = useState<ExportedGood[]>(INITIAL_EXPORTED_GOODS);
+  const [laborLogs, setLaborLogs] = useState<LaborDailyLog[]>(INITIAL_LABOR_LOGS);
+  const [projects, setProjects] = useState<ConstructionProject[]>(INITIAL_PROJECTS);
+  const [materials, setMaterials] = useState<MaterialItem[]>(INITIAL_MATERIALS);
+
+  // Modals state
+  const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
+  const [isNewExportOpen, setIsNewExportOpen] = useState(false);
+  const [isLaborDetailOpen, setIsLaborDetailOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
+
+  // Toast notification
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3200);
+  };
+
+  // Handlers
+  const handleLoginSuccess = (user: UserAccount) => {
+    setCurrentUser(user);
+    setActiveTab('dashboard');
+    showToast(`Chào mừng ${user.name} - Đăng nhập ${user.orgId} thành công!`);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    showToast('Đã đăng xuất khỏi hệ thống');
+  };
+
+  const handleCreateProject = (newProj: ConstructionProject) => {
+    setProjects([newProj, ...projects]);
+    showToast(`Đã tạo dự án mới "${newProj.name}" (${newProj.code})`);
+  };
+
+  const handleAddExport = (newExp: ExportedGood) => {
+    setExportedGoods([newExp, ...exportedGoods]);
+    // update project stats
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.name === newExp.projectName) {
+          return {
+            ...p,
+            totalExportsValue: p.totalExportsValue + newExp.totalPrice,
+          };
+        }
+        return p;
+      })
+    );
+    showToast(`Đã xuất ${newExp.quantity} ${newExp.unit} "${newExp.materialName}"`);
+  };
+
+  const handleAddLaborLog = (newLog: LaborDailyLog) => {
+    setLaborLogs([...laborLogs, newLog]);
+    showToast(`Đã lưu chấm công ngày ${newLog.date} (${newLog.totalWorkdays} Công)`);
+  };
+
+  // If user is not logged in, show the Login screen directly
+  if (!currentUser) {
+    return (
+      <div className="relative min-h-screen">
+        {/* Quick helper banner to auto-login if user wants immediate preview */}
+        <div className="fixed top-3 right-3 z-50 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              handleLoginSuccess({
+                username: 'admin',
+                role: 'admin',
+                orgId: 'CT36',
+                orgName: 'Công Ty Trường Sơn - Waterproofing 36',
+                name: 'Quản Trị Viên (Admin)',
+              })
+            }
+            className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white text-xs font-semibold border border-white/30 shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Bấm để vào thẳng màn hình Tổng quan"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Vào nhanh Tổng quan &gt;</span>
+          </button>
+        </div>
+
+        <LoginScreen onLoginSuccess={handleLoginSuccess} />
+
+        {toastMessage && (
+          <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl text-xs flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
+            <CheckCircle className="w-4 h-4 text-emerald-400" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f8fafd] text-slate-800 flex">
+      {/* Toast Alert */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl text-xs flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle className="w-4 h-4 text-emerald-400" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Main Sidebar */}
+      <Sidebar
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        onOpenNewProject={() => setIsNewProjectOpen(true)}
+        onLogout={handleLogout}
+        currentUser={currentUser}
+        isOpenMobile={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        onOpenSupportModal={() => setIsSupportOpen(true)}
+      />
+
+      {/* Main App Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
+        {/* Top Header Bar for Mobile and Quick Status */}
+        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              id="open-mobile-menu-btn"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 lg:hidden cursor-pointer"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <div className="hidden sm:block">
+              <h2 className="text-sm font-bold text-slate-800 capitalize">
+                {activeTab === 'dashboard' && 'Tổng quan công trường'}
+                {activeTab === 'projects' && 'Danh mục công trình'}
+                {activeTab === 'materials' && 'Vật tư & Định mức'}
+                {activeTab === 'staff' && 'Nhân sự & Thợ thi công'}
+                {activeTab === 'settings' && 'Cấu hình hệ thống'}
+              </h2>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Switch to login screen preview button */}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+              title="Xem lại màn hình Đăng nhập"
+            >
+              Đổi tài khoản / Xem Login
+            </button>
+
+            {/* Notification bell */}
+            <div className="relative">
+              <button
+                type="button"
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+              >
+                <Bell className="w-4 h-4" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
+              </button>
+            </div>
+
+            {/* User Profile Pill */}
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                {currentUser.username.substring(0, 2).toUpperCase()}
+              </div>
+              <div className="hidden md:block text-left leading-tight">
+                <span className="text-xs font-bold text-slate-800 block truncate max-w-[120px]">
+                  {currentUser.name}
+                </span>
+                <span className="text-[10px] text-blue-600 font-semibold block uppercase">
+                  {currentUser.orgId}
+                </span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* View Router */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          {activeTab === 'dashboard' && (
+            <DashboardView
+              exportedGoods={exportedGoods}
+              laborLogs={laborLogs}
+              projects={projects}
+              onOpenLaborDetail={() => setIsLaborDetailOpen(true)}
+              onOpenNewExport={() => setIsNewExportOpen(true)}
+            />
+          )}
+
+          {activeTab === 'projects' && (
+            <ProjectsView
+              projects={projects}
+              onOpenNewProject={() => setIsNewProjectOpen(true)}
+            />
+          )}
+
+          {activeTab === 'materials' && (
+            <MaterialsView
+              materials={materials}
+              onOpenNewExport={() => setIsNewExportOpen(true)}
+            />
+          )}
+
+          {activeTab === 'staff' && <StaffView />}
+
+          {activeTab === 'settings' && <SettingsView currentUser={currentUser} />}
+        </main>
+      </div>
+
+      {/* Modals */}
+      <NewProjectModal
+        isOpen={isNewProjectOpen}
+        onClose={() => setIsNewProjectOpen(false)}
+        onCreateProject={handleCreateProject}
+      />
+
+      <NewExportModal
+        isOpen={isNewExportOpen}
+        onClose={() => setIsNewExportOpen(false)}
+        projects={projects}
+        materials={materials}
+        onAddExport={handleAddExport}
+      />
+
+      <LaborDetailModal
+        isOpen={isLaborDetailOpen}
+        onClose={() => setIsLaborDetailOpen(false)}
+        laborLogs={laborLogs}
+        onAddLaborLog={handleAddLaborLog}
+      />
+
+      <SupportModal
+        isOpen={isSupportOpen}
+        onClose={() => setIsSupportOpen(false)}
+      />
+    </div>
+  );
+}
