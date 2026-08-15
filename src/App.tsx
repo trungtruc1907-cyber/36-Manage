@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Menu, LogIn, CheckCircle, Bell, User as UserIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, LogIn, CheckCircle, Bell, User as UserIcon, Database } from 'lucide-react';
 import {
   INITIAL_EXPORTED_GOODS,
   INITIAL_LABOR_LOGS,
@@ -7,6 +7,17 @@ import {
   INITIAL_PROJECTS,
 } from './data/mockData';
 import { ConstructionProject, ExportedGood, LaborDailyLog, MaterialItem, UserAccount } from './types';
+import {
+  testFirestoreConnection,
+  seedInitialDataIfEmpty,
+  subscribeProjects,
+  subscribeMaterials,
+  subscribeExportedGoods,
+  subscribeLaborLogs,
+  addProjectToFirestore,
+  addExportedGoodToFirestore,
+  addLaborLogToFirestore,
+} from './firebase';
 import { LoginScreen } from './components/LoginScreen';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
@@ -34,6 +45,7 @@ export default function App() {
   const [laborLogs, setLaborLogs] = useState<LaborDailyLog[]>(INITIAL_LABOR_LOGS);
   const [projects, setProjects] = useState<ConstructionProject[]>(INITIAL_PROJECTS);
   const [materials, setMaterials] = useState<MaterialItem[]>(INITIAL_MATERIALS);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
 
   // Modals state
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
@@ -51,6 +63,41 @@ export default function App() {
     }, 3200);
   };
 
+  // Firebase Realtime Subscriptions & Initial Setup
+  useEffect(() => {
+    // Test server connection
+    testFirestoreConnection().then((connected) => {
+      setIsFirebaseConnected(connected);
+    });
+
+    // Seed data if database is new and empty
+    seedInitialDataIfEmpty();
+
+    // Subscribe to collections
+    const unsubProjects = subscribeProjects((data) => {
+      if (data && data.length > 0) setProjects(data);
+    });
+
+    const unsubMaterials = subscribeMaterials((data) => {
+      if (data && data.length > 0) setMaterials(data);
+    });
+
+    const unsubExports = subscribeExportedGoods((data) => {
+      if (data && data.length > 0) setExportedGoods(data);
+    });
+
+    const unsubLabor = subscribeLaborLogs((data) => {
+      if (data && data.length > 0) setLaborLogs(data);
+    });
+
+    return () => {
+      unsubProjects();
+      unsubMaterials();
+      unsubExports();
+      unsubLabor();
+    };
+  }, []);
+
   // Handlers
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
@@ -63,31 +110,36 @@ export default function App() {
     showToast('Đã đăng xuất khỏi hệ thống');
   };
 
-  const handleCreateProject = (newProj: ConstructionProject) => {
-    setProjects([newProj, ...projects]);
-    showToast(`Đã tạo dự án mới "${newProj.name}" (${newProj.code})`);
+  const handleCreateProject = async (newProj: ConstructionProject) => {
+    setProjects((prev) => [newProj, ...prev]);
+    await addProjectToFirestore(newProj);
+    showToast(`Đã lưu dự án "${newProj.name}" vào Firebase Firestore`);
   };
 
-  const handleAddExport = (newExp: ExportedGood) => {
-    setExportedGoods([newExp, ...exportedGoods]);
-    // update project stats
+  const handleAddExport = async (newExp: ExportedGood) => {
+    setExportedGoods((prev) => [newExp, ...prev]);
+    // update project stats locally & sync to Firestore
     setProjects((prev) =>
       prev.map((p) => {
         if (p.name === newExp.projectName) {
-          return {
+          const updated = {
             ...p,
             totalExportsValue: p.totalExportsValue + newExp.totalPrice,
           };
+          addProjectToFirestore(updated);
+          return updated;
         }
         return p;
       })
     );
-    showToast(`Đã xuất ${newExp.quantity} ${newExp.unit} "${newExp.materialName}"`);
+    await addExportedGoodToFirestore(newExp);
+    showToast(`Đã lưu phiếu xuất "${newExp.materialName}" vào Firebase Firestore`);
   };
 
-  const handleAddLaborLog = (newLog: LaborDailyLog) => {
-    setLaborLogs([...laborLogs, newLog]);
-    showToast(`Đã lưu chấm công ngày ${newLog.date} (${newLog.totalWorkdays} Công)`);
+  const handleAddLaborLog = async (newLog: LaborDailyLog) => {
+    setLaborLogs((prev) => [...prev, newLog]);
+    await addLaborLogToFirestore(newLog);
+    showToast(`Đã lưu chấm công ngày ${newLog.date} (${newLog.totalWorkdays} Công) lên Firebase`);
   };
 
   // If user is not logged in, show the Login screen directly
@@ -175,6 +227,12 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Firebase Live Cloud Badge */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold" title="Đã kết nối Firebase Firestore: chongtham36-c3c29">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Firebase Cloud DB</span>
+            </div>
+
             {/* Switch to login screen preview button */}
             <button
               type="button"

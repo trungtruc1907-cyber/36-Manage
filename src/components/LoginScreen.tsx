@@ -269,7 +269,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           {/* Version and Copyright */}
           <div className="mt-6 pt-4 border-t border-slate-100 text-center">
             <p className="text-[11px] text-slate-400 font-medium">
-              Phiên bản 2.4.1 • © 2024 Waterproofing 36
+              Phiên bản 2.4.1 • © 2026 Kho Chống Thấm 36
             </p>
           </div>
         </div>
@@ -281,7 +281,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-100">
             <h3 className="text-base font-bold text-slate-800 mb-2">Quên Mật Khẩu?</h3>
             <p className="text-xs text-slate-600 leading-relaxed mb-4">
-              Vui lòng liên hệ Quản trị viên hệ thống Waterproofing 36 hoặc Hotline kỹ thuật: <strong>1900 3636</strong> để được cấp lại mật khẩu cho tài khoản doanh nghiệp.
+              Vui lòng liên hệ Quản trị viên hệ thống Waterproofing 36 hoặc Hotline kỹ thuật: <strong>0915 586 234</strong> để được cấp lại mật khẩu cho tài khoản doanh nghiệp.
             </p>
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1 mb-4">
               <div className="flex justify-between">

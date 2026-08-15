@@ -38,7 +38,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               <Phone className="w-4 h-4 text-blue-600 flex-shrink-0" />
               <div>
                 <span className="font-bold text-slate-800 block text-xs">Hotline Hỗ Trợ 24/7:</span>
-                <span className="text-blue-700 font-semibold">1900 3636 / 0909 363 636</span>
+                <span className="text-blue-700 font-semibold">0915 586 234</span>
               </div>
             </div>
 

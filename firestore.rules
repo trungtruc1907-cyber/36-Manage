@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper definitions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Allow read and write for the application collections
+    match /projects/{projectId} {
+      allow read, write: if true;
+    }
+
+    match /materials/{materialId} {
+      allow read, write: if true;
+    }
+
+    match /exportedGoods/{exportId} {
+      allow read, write: if true;
+    }
+
+    match /laborLogs/{logId} {
+      allow read, write: if true;
+    }
+
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "ConstructionProject": {
+      "title": "ConstructionProject",
+      "description": "Information about a waterproofing construction project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier" },
+        "code": { "type": "string", "description": "Project code identifier" },
+        "name": { "type": "string", "description": "Project name" },
+        "partner": { "type": "string", "description": "Partner or client name" },
+        "address": { "type": "string", "description": "Site address" },
+        "startDate": { "type": "string", "description": "Start date" },
+        "status": { "type": "string", "enum": ["active", "completed", "pending"] },
+        "totalExportsValue": { "type": "number", "description": "Total value of exported materials" },
+        "workdaysLogged": { "type": "number", "description": "Total workdays recorded" }
+      },
+      "required": ["code", "name", "status"]
+    },
+    "MaterialItem": {
+      "title": "MaterialItem",
+      "description": "Waterproofing material in inventory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique item ID" },
+        "name": { "type": "string", "description": "Material name" },
+        "category": { "type": "string", "description": "Waterproofing category" },
+        "unit": { "type": "string", "description": "Unit of measurement" },
+        "defaultPrice": { "type": "number", "description": "Unit price" },
+        "stockQty": { "type": "number", "description": "Current stock quantity" }
+      },
+      "required": ["name", "unit", "defaultPrice"]
+    },
+    "ExportedGood": {
+      "title": "ExportedGood",
+      "description": "Log of materials exported to construction sites",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique export transaction ID" },
+        "materialName": { "type": "string", "description": "Name of material" },
+        "projectName": { "type": "string", "description": "Target project" },
+        "projectCode": { "type": "string", "description": "Project code" },
+        "quantity": { "type": "number", "description": "Exported quantity" },
+        "unit": { "type": "string", "description": "Unit" },
+        "totalPrice": { "type": "number", "description": "Total amount" },
+        "date": { "type": "string", "description": "Export date" },
+        "recipient": { "type": "string", "description": "Recipient name or team" }
+      },
+      "required": ["materialName", "projectName", "quantity", "totalPrice"]
+    },
+    "LaborDailyLog": {
+      "title": "LaborDailyLog",
+      "description": "Daily timesheet and labor cost record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Log identifier" },
+        "date": { "type": "string", "description": "Date format DD/MM" },
+        "dayOfWeek": { "type": "string", "description": "Day of week abbreviation" },
+        "mainWorkers": { "type": "number", "description": "Count of main master workers" },
+        "helperWorkers": { "type": "number", "description": "Count of helper workers" },
+        "totalWorkdays": { "type": "number", "description": "Sum of workdays" },
+        "totalCost": { "type": "number", "description": "Total labor cost in VND" },
+        "notes": { "type": "string", "description": "Work description or notes" }
+      },
+      "required": ["date", "mainWorkers", "helperWorkers", "totalCost"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "ConstructionProject",
+      "description": "Construction projects collection"
+    },
+    "/materials/{materialId}": {
+      "schema": "MaterialItem",
+      "description": "Inventory materials catalog"
+    },
+    "/exportedGoods/{exportId}": {
+      "schema": "ExportedGood",
+      "description": "Material export transaction log"
+    },
+    "/laborLogs/{logId}": {
+      "schema": "LaborDailyLog",
+      "description": "Daily construction labor logs"
+    }
+  }
+}

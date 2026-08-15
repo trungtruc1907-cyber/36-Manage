@@ -85,6 +85,53 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
           </div>
         </div>
 
+        {/* Firebase Cloud Database */}
+        <div className="pt-4 border-t border-slate-100">
+          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
+            <Database className="w-4 h-4 text-emerald-600" />
+            <span>Cơ Sở Dữ Liệu Đám Mây (Firebase Firestore)</span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Đang kết nối
+            </span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Firebase Project ID</label>
+              <input
+                type="text"
+                disabled
+                value="chongtham36-c3c29"
+                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-800"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Auth Domain</label>
+              <input
+                type="text"
+                disabled
+                value="chongtham36-c3c29.firebaseapp.com"
+                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono text-slate-700"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Storage Bucket</label>
+              <input
+                type="text"
+                disabled
+                value="chongtham36-c3c29.firebasestorage.app"
+                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono text-slate-700"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Đồng bộ dữ liệu Realtime</label>
+              <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-xs text-emerald-800 font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Tự động đồng bộ các bảng: projects, materials, exportedGoods, laborLogs</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* System parameters */}
         <div className="pt-4 border-t border-slate-100">
           <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
@@ -94,15 +141,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser }) => {
           <div className="space-y-2 text-xs text-slate-600">
             <div className="flex justify-between py-1.5 border-b border-slate-50">
               <span className="text-slate-400">Phiên bản hệ thống:</span>
-              <span className="font-semibold text-slate-700">v2.4.1 (Build 2024.08)</span>
+              <span className="font-semibold text-slate-700">v2.4.1 (Build 2026.08)</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-slate-50">
               <span className="text-slate-400">Hỗ trợ kỹ thuật 24/7:</span>
-              <span className="font-semibold text-blue-600">1900 3636</span>
+              <span className="font-semibold text-blue-600">0915 586 234</span>
             </div>
             <div className="flex justify-between py-1.5">
               <span className="text-slate-400">Bản quyền:</span>
-              <span className="font-semibold text-slate-700">© 2024 Waterproofing 36 Vietnam</span>
+              <span className="font-semibold text-slate-700">© 2026 Kho Chống Thấm 36</span>
             </div>
           </div>
         </div>
