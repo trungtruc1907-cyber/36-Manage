@@ -48,3 +48,12 @@ export interface ConstructionProject {
   totalExportsValue: number;
   workdaysLogged: number;
 }
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  role: string;
+  phone: string;
+  exp: string;
+  status: string;
+}

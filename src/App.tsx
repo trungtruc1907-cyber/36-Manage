@@ -5,18 +5,32 @@ import {
   INITIAL_LABOR_LOGS,
   INITIAL_MATERIALS,
   INITIAL_PROJECTS,
+  INITIAL_STAFF,
 } from './data/mockData';
-import { ConstructionProject, ExportedGood, LaborDailyLog, MaterialItem, UserAccount } from './types';
+import {
+  ConstructionProject,
+  ExportedGood,
+  LaborDailyLog,
+  MaterialItem,
+  StaffMember,
+  UserAccount,
+} from './types';
 import {
   testFirestoreConnection,
-  seedInitialDataIfEmpty,
   subscribeProjects,
   subscribeMaterials,
   subscribeExportedGoods,
   subscribeLaborLogs,
+  subscribeStaff,
   addProjectToFirestore,
+  deleteProjectFromFirestore,
+  addMaterialToFirestore,
+  deleteMaterialFromFirestore,
   addExportedGoodToFirestore,
   addLaborLogToFirestore,
+  addStaffToFirestore,
+  deleteStaffFromFirestore,
+  clearAllDatabaseData,
 } from './firebase';
 import { LoginScreen } from './components/LoginScreen';
 import { Sidebar, NavTab } from './components/Sidebar';
@@ -40,11 +54,12 @@ export default function App() {
   // Mobile sidebar drawer state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Core business data states
-  const [exportedGoods, setExportedGoods] = useState<ExportedGood[]>(INITIAL_EXPORTED_GOODS);
-  const [laborLogs, setLaborLogs] = useState<LaborDailyLog[]>(INITIAL_LABOR_LOGS);
-  const [projects, setProjects] = useState<ConstructionProject[]>(INITIAL_PROJECTS);
-  const [materials, setMaterials] = useState<MaterialItem[]>(INITIAL_MATERIALS);
+  // Core business data states - starts clean without demo data
+  const [exportedGoods, setExportedGoods] = useState<ExportedGood[]>([]);
+  const [laborLogs, setLaborLogs] = useState<LaborDailyLog[]>([]);
+  const [projects, setProjects] = useState<ConstructionProject[]>([]);
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(true);
 
   // Modals state
@@ -70,24 +85,34 @@ export default function App() {
       setIsFirebaseConnected(connected);
     });
 
-    // Seed data if database is new and empty
-    seedInitialDataIfEmpty();
+    // Check and clear demo data from Firestore to ensure clean state
+    const demoCleanKey = 'chongtham36_demo_cleaned_v1';
+    if (!localStorage.getItem(demoCleanKey)) {
+      clearAllDatabaseData().then(() => {
+        localStorage.setItem(demoCleanKey, 'true');
+        console.log('Cleared initial demo data from Firestore successfully.');
+      });
+    }
 
     // Subscribe to collections
     const unsubProjects = subscribeProjects((data) => {
-      if (data && data.length > 0) setProjects(data);
+      setProjects(data || []);
     });
 
     const unsubMaterials = subscribeMaterials((data) => {
-      if (data && data.length > 0) setMaterials(data);
+      setMaterials(data || []);
     });
 
     const unsubExports = subscribeExportedGoods((data) => {
-      if (data && data.length > 0) setExportedGoods(data);
+      setExportedGoods(data || []);
     });
 
     const unsubLabor = subscribeLaborLogs((data) => {
-      if (data && data.length > 0) setLaborLogs(data);
+      setLaborLogs(data || []);
+    });
+
+    const unsubStaff = subscribeStaff((data) => {
+      setStaff(data || []);
     });
 
     return () => {
@@ -95,6 +120,7 @@ export default function App() {
       unsubMaterials();
       unsubExports();
       unsubLabor();
+      unsubStaff();
     };
   }, []);
 
@@ -113,7 +139,35 @@ export default function App() {
   const handleCreateProject = async (newProj: ConstructionProject) => {
     setProjects((prev) => [newProj, ...prev]);
     await addProjectToFirestore(newProj);
-    showToast(`Đã lưu dự án "${newProj.name}" vào Firebase Firestore`);
+    showToast(`Đã lưu công trình "${newProj.name}" lên Firebase Firestore`);
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    await deleteProjectFromFirestore(projectId);
+    showToast('Đã xóa công trình khỏi Firestore');
+  };
+
+  const handleAddMaterial = async (newMat: MaterialItem) => {
+    setMaterials((prev) => [newMat, ...prev]);
+    await addMaterialToFirestore(newMat);
+    showToast(`Đã lưu vật tư "${newMat.name}" lên Firebase Firestore`);
+  };
+
+  const handleDeleteMaterial = async (materialId: string) => {
+    setMaterials((prev) => prev.filter((m) => m.id !== materialId));
+    await deleteMaterialFromFirestore(materialId);
+    showToast('Đã xóa vật tư khỏi Firestore');
+  };
+
+  const handleClearAllData = async () => {
+    await clearAllDatabaseData();
+    setProjects([]);
+    setMaterials([]);
+    setExportedGoods([]);
+    setLaborLogs([]);
+    setStaff([]);
+    showToast('Đã xóa toàn bộ dữ liệu demo khỏi cơ sở dữ liệu!');
   };
 
   const handleAddExport = async (newExp: ExportedGood) => {
@@ -140,6 +194,18 @@ export default function App() {
     setLaborLogs((prev) => [...prev, newLog]);
     await addLaborLogToFirestore(newLog);
     showToast(`Đã lưu chấm công ngày ${newLog.date} (${newLog.totalWorkdays} Công) lên Firebase`);
+  };
+
+  const handleAddStaff = async (newStaff: StaffMember) => {
+    setStaff((prev) => [newStaff, ...prev]);
+    await addStaffToFirestore(newStaff);
+    showToast(`Đã lưu nhân sự "${newStaff.name}" lên Firebase Firestore`);
+  };
+
+  const handleDeleteStaff = async (staffId: string) => {
+    setStaff((prev) => prev.filter((s) => s.id !== staffId));
+    await deleteStaffFromFirestore(staffId);
+    showToast('Đã xóa nhân sự khỏi Firestore');
   };
 
   // If user is not logged in, show the Login screen directly
@@ -287,6 +353,7 @@ export default function App() {
             <ProjectsView
               projects={projects}
               onOpenNewProject={() => setIsNewProjectOpen(true)}
+              onDeleteProject={handleDeleteProject}
             />
           )}
 
@@ -294,12 +361,25 @@ export default function App() {
             <MaterialsView
               materials={materials}
               onOpenNewExport={() => setIsNewExportOpen(true)}
+              onAddMaterial={handleAddMaterial}
+              onDeleteMaterial={handleDeleteMaterial}
             />
           )}
 
-          {activeTab === 'staff' && <StaffView />}
+          {activeTab === 'staff' && (
+            <StaffView
+              staff={staff}
+              onAddStaff={handleAddStaff}
+              onDeleteStaff={handleDeleteStaff}
+            />
+          )}
 
-          {activeTab === 'settings' && <SettingsView currentUser={currentUser} />}
+          {activeTab === 'settings' && (
+            <SettingsView
+              currentUser={currentUser}
+              onClearAllData={handleClearAllData}
+            />
+          )}
         </main>
       </div>
 

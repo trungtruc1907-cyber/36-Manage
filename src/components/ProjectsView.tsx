@@ -1,13 +1,28 @@
 import React, { useState } from 'react';
-import { Compass, Plus, Search, MapPin, Calendar, CheckCircle2, Clock } from 'lucide-react';
+import {
+  Compass,
+  Plus,
+  Search,
+  MapPin,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Database,
+  Trash2,
+} from 'lucide-react';
 import { ConstructionProject } from '../types';
 
 interface ProjectsViewProps {
   projects: ConstructionProject[];
   onOpenNewProject: () => void;
+  onDeleteProject?: (id: string) => Promise<void> | void;
 }
 
-export const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, onOpenNewProject }) => {
+export const ProjectsView: React.FC<ProjectsViewProps> = ({
+  projects,
+  onOpenNewProject,
+  onDeleteProject,
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filtered = projects.filter(
@@ -24,8 +39,18 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, onOpenNewP
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Quản Lý Công Trình & Dự Án</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Danh sách các dự án chống thấm đang triển khai thi công</p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+              Quản Lý Công Trình & Dự Án
+            </h2>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <Database className="w-3 h-3" />
+              Firebase Firestore ({projects.length})
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Danh sách các dự án chống thấm đang triển khai thi công, được nạp trực tiếp từ cơ sở dữ liệu
+          </p>
         </div>
 
         <button
@@ -66,10 +91,22 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, onOpenNewP
                 <p className="text-xs text-slate-500 font-medium">{proj.partner}</p>
               </div>
 
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                <CheckCircle2 className="w-3 h-3" />
-                <span>Đang thi công</span>
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Đang thi công</span>
+                </span>
+                {onDeleteProject && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteProject(proj.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
+                    title="Xóa công trình khỏi Firestore"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="text-xs text-slate-600 flex items-center gap-1.5 pt-1">
@@ -94,6 +131,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ projects, onOpenNewP
             </div>
           </div>
         ))}
+
+        {filtered.length === 0 && (
+          <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-slate-200 text-slate-400 text-xs">
+            Không tìm thấy công trình nào trong cơ sở dữ liệu phù hợp với "{searchTerm}"
+          </div>
+        )}
       </div>
     </div>
   );

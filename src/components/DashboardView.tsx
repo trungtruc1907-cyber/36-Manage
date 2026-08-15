@@ -110,15 +110,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }));
   }, [laborLogs]);
 
-  // Project filter chips list
-  const projectChips = [
-    { id: 'all', label: 'Tất cả công trình' },
-    { id: 'Cẩm Bá Thước Azhome', label: 'Cẩm Bá Thước Azhome' },
-    { id: '923 MB 530', label: '923 MB 530' },
-    { id: 'Xd Đoàn Ái Sơn', label: 'Xd Đoàn Ái Sơn' },
-    { id: 'Thế Anh', label: 'Thế Anh' },
-    { id: 'Mr Phúc', label: 'Mr Phúc' },
-  ];
+  // Project filter chips list dynamically from Firestore projects
+  const projectChips = useMemo(() => {
+    const list = [{ id: 'all', label: 'Tất cả công trình' }];
+    projects.forEach((p) => {
+      if (p.name && !list.some((item) => item.id === p.name)) {
+        list.push({ id: p.name, label: p.name });
+      }
+    });
+    return list;
+  }, [projects]);
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-10">
@@ -188,9 +189,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             id="summary-badge-pill"
             className="inline-flex items-center px-4 py-1.5 rounded-full bg-[#e8f1fd] text-[#1967d2] text-xs font-semibold tracking-tight shadow-2xs"
           >
-            <span>43 nhật ký</span>
+            <span>{laborLogs.length} nhật ký</span>
             <span className="mx-2 text-blue-300 font-normal">•</span>
-            <span>{totalExportItemCount} vật tư</span>
+            <span>{totalExportItemCount} vật tư xuất</span>
           </div>
         </div>
       </div>

@@ -63,6 +63,20 @@
         "notes": { "type": "string", "description": "Work description or notes" }
       },
       "required": ["date", "mainWorkers", "helperWorkers", "totalCost"]
+    },
+    "StaffMember": {
+      "title": "StaffMember",
+      "description": "Technical worker or construction supervisor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Staff ID" },
+        "name": { "type": "string", "description": "Full name" },
+        "role": { "type": "string", "description": "Position or role" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "exp": { "type": "string", "description": "Years of experience" },
+        "status": { "type": "string", "description": "Current active site assignment" }
+      },
+      "required": ["name", "role", "phone"]
     }
   },
   "firestore": {
@@ -81,6 +95,10 @@
     "/laborLogs/{logId}": {
       "schema": "LaborDailyLog",
       "description": "Daily construction labor logs"
+    },
+    "/staff/{staffId}": {
+      "schema": "StaffMember",
+      "description": "Staff and technicians directory"
     }
   }
 }

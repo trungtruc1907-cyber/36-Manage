@@ -5,6 +5,7 @@ import {
   doc,
   setDoc,
   addDoc,
+  deleteDoc,
   getDocs,
   onSnapshot,
   getDocFromServer,
@@ -18,12 +19,14 @@ import {
   ExportedGood,
   LaborDailyLog,
   MaterialItem,
+  StaffMember,
 } from './types';
 import {
   INITIAL_EXPORTED_GOODS,
   INITIAL_LABOR_LOGS,
   INITIAL_MATERIALS,
   INITIAL_PROJECTS,
+  INITIAL_STAFF,
 } from './data/mockData';
 
 // User's provided Firebase configuration
@@ -89,43 +92,22 @@ export async function testFirestoreConnection(): Promise<boolean> {
   }
 }
 
-// Seed initial collections if empty
+// Seed initial collections if empty - no demo data seeded
 export async function seedInitialDataIfEmpty() {
-  try {
-    const projectsSnap = await getDocs(collection(db, 'projects'));
-    if (projectsSnap.empty) {
-      console.log('Seeding initial projects to Firestore...');
-      for (const p of INITIAL_PROJECTS) {
-        await setDoc(doc(db, 'projects', p.id), p);
-      }
-    }
+  // Demo data is disabled to keep application completely clean
+}
 
-    const materialsSnap = await getDocs(collection(db, 'materials'));
-    if (materialsSnap.empty) {
-      console.log('Seeding initial materials to Firestore...');
-      for (const m of INITIAL_MATERIALS) {
-        await setDoc(doc(db, 'materials', m.id), m);
-      }
+// Clear all data in Firestore
+export async function clearAllDatabaseData() {
+  const collections = ['projects', 'materials', 'exportedGoods', 'laborLogs', 'staff'];
+  for (const col of collections) {
+    try {
+      const snap = await getDocs(collection(db, col));
+      const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
+      await Promise.all(deletePromises);
+    } catch (err) {
+      console.warn(`Error clearing collection ${col}:`, err);
     }
-
-    const exportsSnap = await getDocs(collection(db, 'exportedGoods'));
-    if (exportsSnap.empty) {
-      console.log('Seeding initial exported goods to Firestore...');
-      for (const exp of INITIAL_EXPORTED_GOODS) {
-        await setDoc(doc(db, 'exportedGoods', exp.id), exp);
-      }
-    }
-
-    const laborSnap = await getDocs(collection(db, 'laborLogs'));
-    if (laborSnap.empty) {
-      console.log('Seeding initial labor logs to Firestore...');
-      for (let i = 0; i < INITIAL_LABOR_LOGS.length; i++) {
-        const log = INITIAL_LABOR_LOGS[i];
-        await setDoc(doc(db, 'laborLogs', `log_${i + 1}`), log);
-      }
-    }
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, 'seed_data');
   }
 }
 
@@ -134,13 +116,11 @@ export function subscribeProjects(onData: (projects: ConstructionProject[]) => v
   return onSnapshot(
     collection(db, 'projects'),
     (snap) => {
-      if (!snap.empty) {
-        const list: ConstructionProject[] = [];
-        snap.forEach((d) => {
-          list.push({ ...d.data(), id: d.id } as ConstructionProject);
-        });
-        onData(list);
-      }
+      const list: ConstructionProject[] = [];
+      snap.forEach((d) => {
+        list.push({ ...d.data(), id: d.id } as ConstructionProject);
+      });
+      onData(list);
     },
     (err) => {
       handleFirestoreError(err, OperationType.LIST, 'projects');
@@ -152,13 +132,11 @@ export function subscribeMaterials(onData: (materials: MaterialItem[]) => void):
   return onSnapshot(
     collection(db, 'materials'),
     (snap) => {
-      if (!snap.empty) {
-        const list: MaterialItem[] = [];
-        snap.forEach((d) => {
-          list.push({ ...d.data(), id: d.id } as MaterialItem);
-        });
-        onData(list);
-      }
+      const list: MaterialItem[] = [];
+      snap.forEach((d) => {
+        list.push({ ...d.data(), id: d.id } as MaterialItem);
+      });
+      onData(list);
     },
     (err) => {
       handleFirestoreError(err, OperationType.LIST, 'materials');
@@ -170,13 +148,11 @@ export function subscribeExportedGoods(onData: (goods: ExportedGood[]) => void):
   return onSnapshot(
     collection(db, 'exportedGoods'),
     (snap) => {
-      if (!snap.empty) {
-        const list: ExportedGood[] = [];
-        snap.forEach((d) => {
-          list.push({ ...d.data(), id: d.id } as ExportedGood);
-        });
-        onData(list);
-      }
+      const list: ExportedGood[] = [];
+      snap.forEach((d) => {
+        list.push({ ...d.data(), id: d.id } as ExportedGood);
+      });
+      onData(list);
     },
     (err) => {
       handleFirestoreError(err, OperationType.LIST, 'exportedGoods');
@@ -188,16 +164,30 @@ export function subscribeLaborLogs(onData: (logs: LaborDailyLog[]) => void): Uns
   return onSnapshot(
     collection(db, 'laborLogs'),
     (snap) => {
-      if (!snap.empty) {
-        const list: LaborDailyLog[] = [];
-        snap.forEach((d) => {
-          list.push(d.data() as LaborDailyLog);
-        });
-        onData(list);
-      }
+      const list: LaborDailyLog[] = [];
+      snap.forEach((d) => {
+        list.push(d.data() as LaborDailyLog);
+      });
+      onData(list);
     },
     (err) => {
       handleFirestoreError(err, OperationType.LIST, 'laborLogs');
+    }
+  );
+}
+
+export function subscribeStaff(onData: (staff: StaffMember[]) => void): Unsubscribe {
+  return onSnapshot(
+    collection(db, 'staff'),
+    (snap) => {
+      const list: StaffMember[] = [];
+      snap.forEach((d) => {
+        list.push({ ...d.data(), id: d.id } as StaffMember);
+      });
+      onData(list);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'staff');
     }
   );
 }
@@ -208,6 +198,30 @@ export async function addProjectToFirestore(project: ConstructionProject) {
     await setDoc(doc(db, 'projects', project.id), project);
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, `projects/${project.id}`);
+  }
+}
+
+export async function deleteProjectFromFirestore(projectId: string) {
+  try {
+    await deleteDoc(doc(db, 'projects', projectId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `projects/${projectId}`);
+  }
+}
+
+export async function addMaterialToFirestore(material: MaterialItem) {
+  try {
+    await setDoc(doc(db, 'materials', material.id), material);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `materials/${material.id}`);
+  }
+}
+
+export async function deleteMaterialFromFirestore(materialId: string) {
+  try {
+    await deleteDoc(doc(db, 'materials', materialId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `materials/${materialId}`);
   }
 }
 
@@ -227,3 +241,20 @@ export async function addLaborLogToFirestore(log: LaborDailyLog) {
     handleFirestoreError(err, OperationType.CREATE, 'laborLogs');
   }
 }
+
+export async function addStaffToFirestore(staff: StaffMember) {
+  try {
+    await setDoc(doc(db, 'staff', staff.id), staff);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, `staff/${staff.id}`);
+  }
+}
+
+export async function deleteStaffFromFirestore(staffId: string) {
+  try {
+    await deleteDoc(doc(db, 'staff', staffId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `staff/${staffId}`);
+  }
+}
+
