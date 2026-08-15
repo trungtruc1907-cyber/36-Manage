@@ -100,16 +100,7 @@ export default function App() {
       setIsFirebaseConnected(connected);
     });
 
-    // Check and clear demo data from Firestore to ensure clean state
-    const demoCleanKey = 'chongtham36_demo_cleaned_v1';
-    if (!localStorage.getItem(demoCleanKey)) {
-      clearAllDatabaseData().then(() => {
-        localStorage.setItem(demoCleanKey, 'true');
-        console.log('Cleared initial demo data from Firestore successfully.');
-      });
-    }
-
-    // Subscribe to collections
+    // Subscribe to all collections in real-time
     const unsubProjects = subscribeProjects((data) => {
       setProjects(data || []);
     });
@@ -201,28 +192,52 @@ export default function App() {
   };
 
   const handleAddExport = async (newExp: ExportedGood) => {
+    // 1. Add export record
     setExportedGoods((prev) => [newExp, ...prev]);
-    // update project stats locally & sync to Firestore
-    setProjects((prev) =>
-      prev.map((p) => {
-        if (p.name === newExp.projectName) {
-          const updated = {
-            ...p,
-            totalExportsValue: p.totalExportsValue + newExp.totalPrice,
-          };
-          addProjectToFirestore(updated);
-          return updated;
-        }
-        return p;
-      })
-    );
     await addExportedGoodToFirestore(newExp);
-    showToast(`Đã lưu phiếu xuất "${newExp.materialName}" vào Firebase Firestore`);
+
+    // 2. Deduct material stock in Firestore
+    const targetMat = materials.find((m) => m.name === newExp.materialName);
+    if (targetMat) {
+      const updatedMat: MaterialItem = {
+        ...targetMat,
+        stockQty: Math.max(0, targetMat.stockQty - newExp.quantity),
+      };
+      setMaterials((prev) => prev.map((m) => (m.id === targetMat.id ? updatedMat : m)));
+      await addMaterialToFirestore(updatedMat);
+    }
+
+    // 3. Update project totalExportsValue in Firestore
+    const targetProj = projects.find((p) => p.name === newExp.projectName);
+    if (targetProj) {
+      const updatedProj: ConstructionProject = {
+        ...targetProj,
+        totalExportsValue: targetProj.totalExportsValue + newExp.totalPrice,
+      };
+      setProjects((prev) => prev.map((p) => (p.id === targetProj.id ? updatedProj : p)));
+      await addProjectToFirestore(updatedProj);
+    }
+
+    showToast(`Đã lưu phiếu xuất "${newExp.materialName}" và đồng bộ kho & công trình lên Firebase`);
   };
 
   const handleAddLaborLog = async (newLog: LaborDailyLog) => {
     setLaborLogs((prev) => [...prev, newLog]);
     await addLaborLogToFirestore(newLog);
+
+    // Update workdaysLogged on the relevant project if project is specified
+    if (newLog.projectName) {
+      const targetProj = projects.find((p) => p.name === newLog.projectName);
+      if (targetProj) {
+        const updatedProj: ConstructionProject = {
+          ...targetProj,
+          workdaysLogged: targetProj.workdaysLogged + newLog.totalWorkdays,
+        };
+        setProjects((prev) => prev.map((p) => (p.id === targetProj.id ? updatedProj : p)));
+        await addProjectToFirestore(updatedProj);
+      }
+    }
+
     showToast(`Đã lưu chấm công ngày ${newLog.date} (${newLog.totalWorkdays} Công) lên Firebase`);
   };
 

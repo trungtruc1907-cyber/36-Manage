@@ -35,6 +35,7 @@ export interface LaborDailyLog {
   totalWorkdays: number;
   totalCost: number;
   notes: string;
+  projectName?: string;
 }
 
 export interface ConstructionProject {
