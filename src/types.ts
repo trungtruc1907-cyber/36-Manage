@@ -4,6 +4,28 @@ export interface UserAccount {
   orgId: string;
   orgName: string;
   name: string;
+  phone?: string;
+  email?: string;
+}
+
+export interface UserAccountRecord extends UserAccount {
+  password?: string;
+  createdAt?: string;
+  lastLoginAt?: string;
+}
+
+export interface LoginHistoryRecord {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+  orgId: string;
+  timestamp: number;
+  timeFormatted: string;
+  status: 'success' | 'failed';
+  userAgent?: string;
+  device?: string;
+  notes?: string;
 }
 
 export interface MaterialItem {
@@ -45,9 +67,15 @@ export interface ConstructionProject {
   partner: string;
   address: string;
   startDate: string;
+  endDate?: string;
   status: 'active' | 'completed' | 'pending';
   totalExportsValue: number;
   workdaysLogged: number;
+  supervisor?: string;
+  category?: string;
+  phone?: string;
+  budget?: number;
+  notes?: string;
 }
 
 export interface StaffMember {

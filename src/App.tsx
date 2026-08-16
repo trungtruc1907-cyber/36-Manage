@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, LogIn, CheckCircle, Bell, User as UserIcon, Database } from 'lucide-react';
+import { Menu, LogIn, CheckCircle, Bell, User as UserIcon, Database, Shield, LogOut, ChevronDown } from 'lucide-react';
 import {
   DEFAULT_COMPANY_SETTINGS,
   INITIAL_EXPORTED_GOODS,
@@ -16,6 +16,8 @@ import {
   MaterialItem,
   StaffMember,
   UserAccount,
+  UserAccountRecord,
+  LoginHistoryRecord,
 } from './types';
 import {
   testFirestoreConnection,
@@ -25,8 +27,15 @@ import {
   subscribeLaborLogs,
   subscribeStaff,
   subscribeCompanySettings,
+  subscribeUserAccounts,
+  subscribeLoginHistory,
+  recordLoginHistoryToDatabase,
+  clearLoginHistoryFromDatabase,
   saveCompanySettingsToFirestore,
+  saveUserAccountToDatabase,
+  deleteUserAccountFromDatabase,
   addProjectToFirestore,
+  updateProjectInFirestore,
   deleteProjectFromFirestore,
   addMaterialToFirestore,
   deleteMaterialFromFirestore,
@@ -35,6 +44,9 @@ import {
   addStaffToFirestore,
   deleteStaffFromFirestore,
   clearAllDatabaseData,
+  seedSampleDataToFirestore,
+  seedInitialDataIfEmpty,
+  INITIAL_USER_ACCOUNTS,
 } from './firebase';
 import { LoginScreen } from './components/LoginScreen';
 import { Sidebar, NavTab } from './components/Sidebar';
@@ -49,8 +61,24 @@ import { LaborDetailModal } from './components/LaborDetailModal';
 import { SupportModal } from './components/SupportModal';
 
 export default function App() {
-  // Authentication state - starts with demo logged in or login screen
-  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  // Authentication state - restore remember-me session if present, else null
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    const savedUser = localStorage.getItem('chongtham36_active_user');
+    if (savedUser) {
+      try {
+        return JSON.parse(savedUser) as UserAccount;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  // System user accounts list
+  const [accounts, setAccounts] = useState<UserAccountRecord[]>(INITIAL_USER_ACCOUNTS);
+
+  // Login Activity History list from Firestore
+  const [loginHistory, setLoginHistory] = useState<LoginHistoryRecord[]>([]);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
@@ -58,12 +86,12 @@ export default function App() {
   // Mobile sidebar drawer state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Core business data states - starts clean without demo data
-  const [exportedGoods, setExportedGoods] = useState<ExportedGood[]>([]);
-  const [laborLogs, setLaborLogs] = useState<LaborDailyLog[]>([]);
-  const [projects, setProjects] = useState<ConstructionProject[]>([]);
-  const [materials, setMaterials] = useState<MaterialItem[]>([]);
-  const [staff, setStaff] = useState<StaffMember[]>([]);
+  // Core business data states - starts with authentic waterproofing data and syncs with Firestore
+  const [exportedGoods, setExportedGoods] = useState<ExportedGood[]>(INITIAL_EXPORTED_GOODS);
+  const [laborLogs, setLaborLogs] = useState<LaborDailyLog[]>(INITIAL_LABOR_LOGS);
+  const [projects, setProjects] = useState<ConstructionProject[]>(INITIAL_PROJECTS);
+  const [materials, setMaterials] = useState<MaterialItem[]>(INITIAL_MATERIALS);
+  const [staff, setStaff] = useState<StaffMember[]>(INITIAL_STAFF);
   const [companySettings, setCompanySettings] = useState<CompanySettings>(() => {
     const saved = localStorage.getItem('chongtham36_company_settings');
     if (saved) {
@@ -79,7 +107,9 @@ export default function App() {
 
   // Modals state
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<ConstructionProject | null>(null);
   const [isNewExportOpen, setIsNewExportOpen] = useState(false);
+  const [exportInitialProject, setExportInitialProject] = useState<string | undefined>(undefined);
   const [isLaborDetailOpen, setIsLaborDetailOpen] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
@@ -100,31 +130,56 @@ export default function App() {
       setIsFirebaseConnected(connected);
     });
 
+    // Auto-seed initial data to Firestore if empty
+    seedInitialDataIfEmpty();
+
     // Subscribe to all collections in real-time
     const unsubProjects = subscribeProjects((data) => {
-      setProjects(data || []);
+      if (data && data.length > 0) {
+        setProjects(data);
+      }
     });
 
     const unsubMaterials = subscribeMaterials((data) => {
-      setMaterials(data || []);
+      if (data && data.length > 0) {
+        setMaterials(data);
+      }
     });
 
     const unsubExports = subscribeExportedGoods((data) => {
-      setExportedGoods(data || []);
+      if (data && data.length > 0) {
+        setExportedGoods(data);
+      }
     });
 
     const unsubLabor = subscribeLaborLogs((data) => {
-      setLaborLogs(data || []);
+      if (data && data.length > 0) {
+        setLaborLogs(data);
+      }
     });
 
     const unsubStaff = subscribeStaff((data) => {
-      setStaff(data || []);
+      if (data && data.length > 0) {
+        setStaff(data);
+      }
     });
 
     const unsubCompanySettings = subscribeCompanySettings((data) => {
       if (data) {
         setCompanySettings(data);
         localStorage.setItem('chongtham36_company_settings', JSON.stringify(data));
+      }
+    });
+
+    const unsubAccounts = subscribeUserAccounts((data) => {
+      if (data && data.length > 0) {
+        setAccounts(data);
+      }
+    });
+
+    const unsubLoginHistory = subscribeLoginHistory((data) => {
+      if (data) {
+        setLoginHistory(data);
       }
     });
 
@@ -135,6 +190,8 @@ export default function App() {
       unsubLabor();
       unsubStaff();
       unsubCompanySettings();
+      unsubAccounts();
+      unsubLoginHistory();
     };
   }, []);
 
@@ -146,49 +203,98 @@ export default function App() {
     showToast('Đã lưu cấu hình doanh nghiệp và logo thành công!');
   };
 
-  const handleLoginSuccess = (user: UserAccount) => {
+  const handleLoginSuccess = async (user: UserAccount) => {
     setCurrentUser(user);
     setActiveTab('dashboard');
+
+    // Format device / browser info
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Web Browser';
+    let device = 'Máy tính (Desktop)';
+    if (/mobile|android|iphone|ipad|tablet/i.test(userAgent)) {
+      device = 'Điện thoại / Di động';
+    }
+
+    const now = new Date();
+    const timeFormatted = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+    const loginRecord: LoginHistoryRecord = {
+      id: `LOG-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      orgId: user.orgId,
+      timestamp: Date.now(),
+      timeFormatted,
+      status: 'success',
+      userAgent: userAgent.substring(0, 150),
+      device,
+      notes: 'Đăng nhập hệ thống thành công',
+    };
+
+    // Save login log to Firebase Realtime Database
+    await recordLoginHistoryToDatabase(loginRecord);
     showToast(`Chào mừng ${user.name} - Đăng nhập ${user.orgId} thành công!`);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    localStorage.removeItem('chongtham36_active_user');
     showToast('Đã đăng xuất khỏi hệ thống');
   };
 
-  const handleCreateProject = async (newProj: ConstructionProject) => {
-    setProjects((prev) => [newProj, ...prev]);
-    await addProjectToFirestore(newProj);
-    showToast(`Đã lưu công trình "${newProj.name}" lên Firebase Firestore`);
+  const handleClearLoginHistory = async () => {
+    await clearLoginHistoryFromDatabase();
+    setLoginHistory([]);
+    showToast('Đã xóa toàn bộ nhật ký đăng nhập trên Realtime Database!');
+  };
+
+  const handleRegisterAccount = async (newAccount: UserAccountRecord) => {
+    setAccounts((prev) => [...prev.filter((a) => a.username !== newAccount.username), newAccount]);
+    await saveUserAccountToDatabase(newAccount);
+    showToast(`Đã tạo tài khoản "${newAccount.name}" (${newAccount.username}) thành công!`);
+  };
+
+  const handleSaveAccount = async (account: UserAccountRecord) => {
+    setAccounts((prev) => [...prev.filter((a) => a.username !== account.username), account]);
+    await saveUserAccountToDatabase(account);
+    showToast(`Đã cập nhật thông tin tài khoản "${account.name}"!`);
+  };
+
+  const handleDeleteAccount = async (username: string) => {
+    setAccounts((prev) => prev.filter((a) => a.username !== username));
+    await deleteUserAccountFromDatabase(username);
+    showToast(`Đã xóa tài khoản "${username}" khỏi hệ thống!`);
+  };
+
+  const handleSaveProject = async (proj: ConstructionProject) => {
+    const isExisting = projects.some((p) => p.id === proj.id);
+    if (isExisting) {
+      setProjects((prev) => prev.map((p) => (p.id === proj.id ? proj : p)));
+      await updateProjectInFirestore(proj);
+      showToast(`Đã cập nhật công trình "${proj.name}" lên Realtime Database`);
+    } else {
+      setProjects((prev) => [proj, ...prev]);
+      await addProjectToFirestore(proj);
+      showToast(`Đã lưu công trình mới "${proj.name}" lên Realtime Database`);
+    }
   };
 
   const handleDeleteProject = async (projectId: string) => {
     setProjects((prev) => prev.filter((p) => p.id !== projectId));
     await deleteProjectFromFirestore(projectId);
-    showToast('Đã xóa công trình khỏi Firestore');
+    showToast('Đã xóa công trình khỏi Realtime Database');
   };
 
   const handleAddMaterial = async (newMat: MaterialItem) => {
     setMaterials((prev) => [newMat, ...prev]);
     await addMaterialToFirestore(newMat);
-    showToast(`Đã lưu vật tư "${newMat.name}" lên Firebase Firestore`);
+    showToast(`Đã lưu vật tư "${newMat.name}" lên Realtime Database`);
   };
 
   const handleDeleteMaterial = async (materialId: string) => {
     setMaterials((prev) => prev.filter((m) => m.id !== materialId));
     await deleteMaterialFromFirestore(materialId);
-    showToast('Đã xóa vật tư khỏi Firestore');
-  };
-
-  const handleClearAllData = async () => {
-    await clearAllDatabaseData();
-    setProjects([]);
-    setMaterials([]);
-    setExportedGoods([]);
-    setLaborLogs([]);
-    setStaff([]);
-    showToast('Đã xóa toàn bộ dữ liệu demo khỏi cơ sở dữ liệu!');
+    showToast('Đã xóa vật tư khỏi Realtime Database');
   };
 
   const handleAddExport = async (newExp: ExportedGood) => {
@@ -196,7 +302,7 @@ export default function App() {
     setExportedGoods((prev) => [newExp, ...prev]);
     await addExportedGoodToFirestore(newExp);
 
-    // 2. Deduct material stock in Firestore
+    // 2. Deduct material stock in Database
     const targetMat = materials.find((m) => m.name === newExp.materialName);
     if (targetMat) {
       const updatedMat: MaterialItem = {
@@ -207,7 +313,7 @@ export default function App() {
       await addMaterialToFirestore(updatedMat);
     }
 
-    // 3. Update project totalExportsValue in Firestore
+    // 3. Update project totalExportsValue in Database
     const targetProj = projects.find((p) => p.name === newExp.projectName);
     if (targetProj) {
       const updatedProj: ConstructionProject = {
@@ -218,7 +324,7 @@ export default function App() {
       await addProjectToFirestore(updatedProj);
     }
 
-    showToast(`Đã lưu phiếu xuất "${newExp.materialName}" và đồng bộ kho & công trình lên Firebase`);
+    showToast(`Đã lưu phiếu xuất "${newExp.materialName}" và đồng bộ kho & công trình lên Realtime Database`);
   };
 
   const handleAddLaborLog = async (newLog: LaborDailyLog) => {
@@ -238,19 +344,39 @@ export default function App() {
       }
     }
 
-    showToast(`Đã lưu chấm công ngày ${newLog.date} (${newLog.totalWorkdays} Công) lên Firebase`);
+    showToast(`Đã lưu chấm công ngày ${newLog.date} (${newLog.totalWorkdays} Công) lên Realtime Database`);
   };
 
   const handleAddStaff = async (newStaff: StaffMember) => {
     setStaff((prev) => [newStaff, ...prev]);
     await addStaffToFirestore(newStaff);
-    showToast(`Đã lưu nhân sự "${newStaff.name}" lên Firebase Firestore`);
+    showToast(`Đã lưu nhân sự "${newStaff.name}" lên Realtime Database`);
   };
 
   const handleDeleteStaff = async (staffId: string) => {
     setStaff((prev) => prev.filter((s) => s.id !== staffId));
     await deleteStaffFromFirestore(staffId);
-    showToast('Đã xóa nhân sự khỏi Firestore');
+    showToast('Đã xóa nhân sự khỏi Realtime Database');
+  };
+
+  const handleClearAllData = async () => {
+    await clearAllDatabaseData();
+    setProjects([]);
+    setMaterials([]);
+    setExportedGoods([]);
+    setLaborLogs([]);
+    setStaff([]);
+    showToast('Đã xóa toàn bộ dữ liệu trên Realtime Database thành công!');
+  };
+
+  const handleSeedSampleData = async () => {
+    await seedSampleDataToFirestore();
+    setProjects(INITIAL_PROJECTS);
+    setMaterials(INITIAL_MATERIALS);
+    setExportedGoods(INITIAL_EXPORTED_GOODS);
+    setLaborLogs(INITIAL_LABOR_LOGS);
+    setStaff(INITIAL_STAFF);
+    showToast('Đã nạp và đồng bộ toàn bộ dữ liệu mẫu lên Realtime Database!');
   };
 
   // If user is not logged in, show the Login screen directly
@@ -265,8 +391,8 @@ export default function App() {
               handleLoginSuccess({
                 username: 'admin',
                 role: 'admin',
-                orgId: 'CT36',
-                orgName: 'Công Ty Trường Sơn - Waterproofing 36',
+                orgId: companySettings?.orgId || 'CT36',
+                orgName: companySettings?.orgName || 'Công Ty Trường Sơn - Waterproofing 36',
                 name: 'Quản Trị Viên (Admin)',
               })
             }
@@ -280,6 +406,8 @@ export default function App() {
 
         <LoginScreen
           onLoginSuccess={handleLoginSuccess}
+          onRegisterAccount={handleRegisterAccount}
+          accounts={accounts}
           companySettings={companySettings}
         />
 
@@ -318,7 +446,7 @@ export default function App() {
 
       {/* Main App Content Area */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
-        {/* Top Header Bar for Mobile and Quick Status */}
+        {/* Top Header Bar */}
         <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -343,26 +471,30 @@ export default function App() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Firebase Live Cloud Badge */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold" title="Đã kết nối Firebase Firestore: chongtham36-c3c29">
+            <div
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold"
+              title="Đã kết nối Firebase Realtime Database: kho36manage"
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Firebase Cloud DB</span>
+              <span>Firebase RTDB</span>
             </div>
 
-            {/* Switch to login screen preview button */}
+            {/* Switch to login screen button */}
             <button
               type="button"
               onClick={handleLogout}
-              className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-              title="Xem lại màn hình Đăng nhập"
+              className="px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+              title="Đăng xuất hoặc đổi tài khoản"
             >
-              Đổi tài khoản / Xem Login
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Đổi tài khoản</span>
             </button>
 
             {/* Notification bell */}
             <div className="relative">
               <button
                 type="button"
-                className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <Bell className="w-4 h-4" />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
@@ -371,15 +503,23 @@ export default function App() {
 
             {/* User Profile Pill */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white shadow-xs ${
+                  currentUser.role === 'admin'
+                    ? 'bg-amber-600'
+                    : currentUser.role === 'storekeeper'
+                    ? 'bg-emerald-600'
+                    : 'bg-blue-600'
+                }`}
+              >
                 {currentUser.username.substring(0, 2).toUpperCase()}
               </div>
               <div className="hidden md:block text-left leading-tight">
-                <span className="text-xs font-bold text-slate-800 block truncate max-w-[120px]">
+                <span className="text-xs font-bold text-slate-800 block truncate max-w-[130px]">
                   {currentUser.name}
                 </span>
                 <span className="text-[10px] text-blue-600 font-semibold block uppercase">
-                  {currentUser.orgId}
+                  {currentUser.orgId} • {currentUser.role}
                 </span>
               </div>
             </div>
@@ -401,8 +541,22 @@ export default function App() {
           {activeTab === 'projects' && (
             <ProjectsView
               projects={projects}
-              onOpenNewProject={() => setIsNewProjectOpen(true)}
+              exportedGoods={exportedGoods}
+              laborLogs={laborLogs}
+              staff={staff}
+              onOpenNewProject={() => {
+                setEditingProject(null);
+                setIsNewProjectOpen(true);
+              }}
+              onEditProject={(proj) => {
+                setEditingProject(proj);
+                setIsNewProjectOpen(true);
+              }}
               onDeleteProject={handleDeleteProject}
+              onOpenExportForProject={(proj) => {
+                setExportInitialProject(proj.name);
+                setIsNewExportOpen(true);
+              }}
             />
           )}
 
@@ -426,9 +580,15 @@ export default function App() {
           {activeTab === 'settings' && (
             <SettingsView
               currentUser={currentUser}
+              accounts={accounts}
               companySettings={companySettings}
+              loginHistory={loginHistory}
+              onClearLoginHistory={handleClearLoginHistory}
               onUpdateCompanySettings={handleUpdateCompanySettings}
+              onSaveAccount={handleSaveAccount}
+              onDeleteAccount={handleDeleteAccount}
               onClearAllData={handleClearAllData}
+              onSeedSampleData={handleSeedSampleData}
             />
           )}
         </main>
@@ -437,16 +597,26 @@ export default function App() {
       {/* Modals */}
       <NewProjectModal
         isOpen={isNewProjectOpen}
-        onClose={() => setIsNewProjectOpen(false)}
-        onCreateProject={handleCreateProject}
+        onClose={() => {
+          setIsNewProjectOpen(false);
+          setEditingProject(null);
+        }}
+        onSaveProject={handleSaveProject}
+        initialData={editingProject}
+        staffList={staff}
+        existingProjectsCount={projects.length}
       />
 
       <NewExportModal
         isOpen={isNewExportOpen}
-        onClose={() => setIsNewExportOpen(false)}
+        onClose={() => {
+          setIsNewExportOpen(false);
+          setExportInitialProject(undefined);
+        }}
         projects={projects}
         materials={materials}
         onAddExport={handleAddExport}
+        initialProjectName={exportInitialProject}
       />
 
       <LaborDetailModal

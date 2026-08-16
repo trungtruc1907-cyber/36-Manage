@@ -9,7 +9,6 @@ import {
   Image as ImageIcon,
   ChevronRight,
   Plus,
-  Filter,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -36,7 +35,6 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   exportedGoods,
   laborLogs,
-  projects,
   onOpenLaborDetail,
   onOpenNewExport,
 }) => {
@@ -49,7 +47,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
 
   // Bottom filter states
-  const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('all');
   const [goodsTab, setGoodsTab] = useState<'revenue' | 'quantity' | 'by_project'>('revenue');
   const [topLimit, setTopLimit] = useState<number>(20);
   const [showTopDropdown, setShowTopDropdown] = useState(false);
@@ -63,10 +60,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const filteredGoods = useMemo(() => {
     let list = [...exportedGoods];
 
-    if (selectedProjectFilter !== 'all') {
-      list = list.filter((item) => item.projectName === selectedProjectFilter);
-    }
-
     if (goodsTab === 'revenue') {
       list.sort((a, b) => b.totalPrice - a.totalPrice);
     } else if (goodsTab === 'quantity') {
@@ -76,7 +69,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
 
     return list.slice(0, topLimit);
-  }, [exportedGoods, selectedProjectFilter, goodsTab, topLimit]);
+  }, [exportedGoods, goodsTab, topLimit]);
 
   // Overall calculations
   const totalWorkdays = useMemo(() => {
@@ -109,17 +102,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       notes: log.notes,
     }));
   }, [laborLogs]);
-
-  // Project filter chips list dynamically from Firestore projects
-  const projectChips = useMemo(() => {
-    const list = [{ id: 'all', label: 'Tất cả công trình' }];
-    projects.forEach((p) => {
-      if (p.name && !list.some((item) => item.id === p.name)) {
-        list.push({ id: p.name, label: p.name });
-      }
-    });
-    return list;
-  }, [projects]);
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-10">
@@ -483,28 +465,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        {/* Project Filter Chips */}
-        <div className="flex flex-wrap items-center gap-2 mb-4 pb-2 border-b border-slate-100">
-          {projectChips.map((chip) => {
-            const isSelected = selectedProjectFilter === chip.id;
-            return (
-              <button
-                key={chip.id}
-                type="button"
-                id={`filter-project-${chip.id.replace(/\s+/g, '-').toLowerCase()}`}
-                onClick={() => setSelectedProjectFilter(chip.id)}
-                className={`text-xs font-semibold px-4 py-1.5 rounded-full transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-[#1e293b] text-white shadow-xs'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {chip.label}
-              </button>
-            );
-          })}
-        </div>
-
         {/* Sub-Filters and Top Dropdown */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           {/* Tabs: Doanh thu / Số lượng / Theo công trình */}
@@ -590,8 +550,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {filteredGoods.length === 0 ? (
             <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
               <Archive className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-600">Không tìm thấy hàng hóa xuất cho bộ lọc này</p>
-              <p className="text-xs text-slate-400 mt-1">Chọn "Tất cả công trình" để xem danh sách đầy đủ</p>
+              <p className="text-sm font-semibold text-slate-600">Không tìm thấy hàng hóa xuất cho danh mục này</p>
             </div>
           ) : (
             filteredGoods.map((item, idx) => (

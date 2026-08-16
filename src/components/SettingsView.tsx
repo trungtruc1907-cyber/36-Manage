@@ -17,23 +17,51 @@ import {
   MapPin,
   FileText,
   Sparkles,
+  Key,
+  Users,
+  UserCheck,
+  UserPlus,
+  Eye,
+  EyeOff,
+  Check,
+  History,
+  Laptop,
+  Smartphone,
+  Search,
+  Filter,
+  X,
+  Lock,
+  Edit2,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
-import { CompanySettings, UserAccount } from '../types';
+import { CompanySettings, UserAccount, UserAccountRecord, LoginHistoryRecord } from '../types';
 import { DEFAULT_COMPANY_SETTINGS } from '../data/mockData';
+import { INITIAL_USER_ACCOUNTS } from '../firebase';
 
 interface SettingsViewProps {
   currentUser: UserAccount | null;
+  accounts?: UserAccountRecord[];
   companySettings: CompanySettings;
+  loginHistory?: LoginHistoryRecord[];
+  onClearLoginHistory?: () => Promise<void> | void;
   onUpdateCompanySettings: (newSettings: CompanySettings) => Promise<void> | void;
+  onSaveAccount?: (account: UserAccountRecord) => Promise<void> | void;
+  onDeleteAccount?: (username: string) => Promise<void> | void;
   onClearAllData?: () => Promise<void> | void;
+  onSeedSampleData?: () => Promise<void> | void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   currentUser,
+  accounts = INITIAL_USER_ACCOUNTS,
   companySettings,
+  loginHistory = [],
+  onClearLoginHistory,
   onUpdateCompanySettings,
+  onSaveAccount,
+  onDeleteAccount,
   onClearAllData,
+  onSeedSampleData,
 }) => {
   // Form states
   const [formData, setFormData] = useState<CompanySettings>(companySettings);
@@ -43,12 +71,182 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Clear data states
+  // Password Change state for active user
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ text: string; isError: boolean } | null>(null);
+  const [isChangingPass, setIsChangingPass] = useState(false);
+
+  // Add New Account Modal & State
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addUsername, setAddUsername] = useState('');
+  const [addPassword, setAddPassword] = useState('123456');
+  const [addRole, setAddRole] = useState<'admin' | 'storekeeper' | 'supervisor'>('supervisor');
+  const [addOrgId, setAddOrgId] = useState(companySettings?.orgId || 'CT36');
+  const [addPhone, setAddPhone] = useState('');
+  const [addUserError, setAddUserError] = useState('');
+  const [isSavingUser, setIsSavingUser] = useState(false);
+
+  // Edit Account Password / Role Modal
+  const [editingAccount, setEditingAccount] = useState<UserAccountRecord | null>(null);
+  const [editPassValue, setEditPassValue] = useState('');
+  const [editRoleValue, setEditRoleValue] = useState<'admin' | 'storekeeper' | 'supervisor'>('supervisor');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Login History Search & Filter states
+  const [searchLoginQuery, setSearchLoginQuery] = useState('');
+  const [filterLoginStatus, setFilterLoginStatus] = useState<'all' | 'success' | 'failed'>('all');
+  const [isConfirmingClearLogs, setIsConfirmingClearLogs] = useState(false);
+  const [isClearingLogs, setIsClearingLogs] = useState(false);
+
+  // Clear & Seed data states
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [clearedSuccess, setClearedSuccess] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [seedSuccess, setSeedSuccess] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Handle password change for active user
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordMsg(null);
+
+    if (!newPassword.trim() || newPassword.length < 4) {
+      setPasswordMsg({ text: 'Mật khẩu mới phải có ít nhất 4 ký tự', isError: true });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ text: 'Mật khẩu xác nhận không khớp', isError: true });
+      return;
+    }
+
+    if (!currentUser) return;
+
+    setIsChangingPass(true);
+    const existing = accounts.find((a) => a.username.toLowerCase() === currentUser.username.toLowerCase());
+    const updatedAccount: UserAccountRecord = {
+      username: currentUser.username,
+      name: currentUser.name,
+      role: currentUser.role,
+      orgId: currentUser.orgId,
+      orgName: currentUser.orgName,
+      phone: currentUser.phone || existing?.phone,
+      email: currentUser.email || existing?.email,
+      password: newPassword.trim(),
+    };
+
+    if (onSaveAccount) {
+      await onSaveAccount(updatedAccount);
+    }
+
+    setIsChangingPass(false);
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordMsg({ text: 'Đã cập nhật mật khẩu mới thành công lên Realtime Database!', isError: false });
+  };
+
+  // Handle Create Account Submit
+  const handleCreateAccountSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddUserError('');
+
+    const cleanUsername = addUsername.trim().toLowerCase().replace(/\s+/g, '');
+    const cleanName = addName.trim();
+    const cleanPass = addPassword.trim();
+    const cleanOrg = addOrgId.trim().toUpperCase() || 'CT36';
+
+    if (!cleanName) {
+      setAddUserError('Vui lòng nhập Họ tên nhân sự');
+      return;
+    }
+    if (!cleanUsername || cleanUsername.length < 3) {
+      setAddUserError('Tên đăng nhập phải có ít nhất 3 ký tự (không dấu, không khoảng trắng)');
+      return;
+    }
+    if (!cleanPass || cleanPass.length < 4) {
+      setAddUserError('Mật khẩu phải có ít nhất 4 ký tự');
+      return;
+    }
+
+    // Check duplicate
+    if (accounts.some((a) => a.username.toLowerCase() === cleanUsername)) {
+      setAddUserError(`Tên đăng nhập "${cleanUsername}" đã tồn tại trong hệ thống!`);
+      return;
+    }
+
+    setIsSavingUser(true);
+    const newAcc: UserAccountRecord = {
+      username: cleanUsername,
+      password: cleanPass,
+      name: cleanName,
+      role: addRole,
+      orgId: cleanOrg,
+      orgName: companySettings?.orgName || `Đơn vị ${cleanOrg}`,
+      phone: addPhone.trim() || undefined,
+      createdAt: new Date().toLocaleDateString('vi-VN'),
+    };
+
+    if (onSaveAccount) {
+      await onSaveAccount(newAcc);
+    }
+
+    setIsSavingUser(false);
+    setIsAddUserOpen(false);
+    setAddName('');
+    setAddUsername('');
+    setAddPassword('123456');
+    setAddPhone('');
+  };
+
+  // Handle Edit Account Save
+  const handleSaveEditAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAccount) return;
+
+    setIsSavingEdit(true);
+    const updated: UserAccountRecord = {
+      ...editingAccount,
+      role: editRoleValue,
+      password: editPassValue.trim() ? editPassValue.trim() : editingAccount.password,
+    };
+
+    if (onSaveAccount) {
+      await onSaveAccount(updated);
+    }
+
+    setIsSavingEdit(false);
+    setEditingAccount(null);
+  };
+
+  // Handle Clear Logs
+  const handleClearLogs = async () => {
+    if (!onClearLoginHistory) return;
+    setIsClearingLogs(true);
+    await onClearLoginHistory();
+    setIsClearingLogs(false);
+    setIsConfirmingClearLogs(false);
+  };
+
+  // Filter login logs
+  const filteredLogs = loginHistory.filter((log) => {
+    const matchSearch =
+      !searchLoginQuery ||
+      log.username.toLowerCase().includes(searchLoginQuery.toLowerCase()) ||
+      log.name.toLowerCase().includes(searchLoginQuery.toLowerCase()) ||
+      log.orgId.toLowerCase().includes(searchLoginQuery.toLowerCase()) ||
+      log.timeFormatted.includes(searchLoginQuery);
+
+    const matchStatus =
+      filterLoginStatus === 'all' ||
+      (filterLoginStatus === 'success' && log.status === 'success') ||
+      (filterLoginStatus === 'failed' && log.status === 'failed');
+
+    return matchSearch && matchStatus;
+  });
 
   // Sync state when prop updates
   useEffect(() => {
@@ -151,6 +349,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setClearedSuccess(true);
     setTimeout(() => {
       setClearedSuccess(false);
+    }, 4000);
+  };
+
+  const handleSeed = async () => {
+    if (!onSeedSampleData) return;
+    setIsSeeding(true);
+    await onSeedSampleData();
+    setIsSeeding(false);
+    setSeedSuccess(true);
+    setTimeout(() => {
+      setSeedSuccess(false);
     }, 4000);
   };
 
@@ -508,95 +717,712 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {/* SECTION 3: USER PROFILE & FIREBASE CLOUD */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs space-y-6">
-        {/* User profile */}
+        {/* User profile & Active Role */}
         <div>
-          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
-            <Shield className="w-4 h-4 text-blue-600" />
-            <span>Tài khoản đang đăng nhập</span>
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <Shield className="w-4 h-4 text-blue-600" />
+              <span>Tài khoản & Phân quyền đang hoạt động</span>
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 uppercase">
+              {currentUser?.role === 'admin'
+                ? '👑 Quản Trị Viên'
+                : currentUser?.role === 'storekeeper'
+                ? '📦 Thủ Kho'
+                : '👷 Giám Sát'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Tài khoản</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Họ tên nhân sự</label>
+              <input
+                type="text"
+                disabled
+                value={currentUser?.name || 'Quản Trị Viên'}
+                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold text-slate-800"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Tên đăng nhập (User)</label>
               <input
                 type="text"
                 disabled
                 value={currentUser?.username || 'admin'}
-                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700"
+                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono font-bold text-blue-700"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Vai trò</label>
-              <span className="inline-block px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold">
-                Quản trị viên cấp cao (Admin)
-              </span>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Mã Doanh Nghiệp (Org ID)</label>
+              <input
+                type="text"
+                disabled
+                value={currentUser?.orgId || 'CT36'}
+                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 uppercase"
+              />
+            </div>
+          </div>
+
+          {/* Change Password Form */}
+          <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-2">
+              <Key className="w-3.5 h-3.5 text-blue-600" />
+              <span>Đổi Mật Khẩu Cho Tài Khoản Này</span>
+            </h4>
+
+            {passwordMsg && (
+              <div
+                className={`mb-3 p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                  passwordMsg.isError
+                    ? 'bg-rose-50 border border-rose-200 text-rose-700'
+                    : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                }`}
+              >
+                {passwordMsg.isError ? (
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                ) : (
+                  <Check className="w-4 h-4 flex-shrink-0" />
+                )}
+                <span>{passwordMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[160px]">
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Mật khẩu mới</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Nhập mật khẩu mới"
+                    className="w-full px-3 py-1.5 text-xs bg-white rounded-lg border border-slate-300 outline-none focus:border-blue-600 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 min-w-[160px]">
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Nhập lại mật khẩu</label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Xác nhận mật khẩu"
+                  className="w-full px-3 py-1.5 text-xs bg-white rounded-lg border border-slate-300 outline-none focus:border-blue-600 font-mono"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isChangingPass}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isChangingPass ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                <span>Lưu Mật Khẩu</span>
+              </button>
+            </form>
+          </div>
+
+          {/* System Accounts Directory & Management */}
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-blue-600" />
+                  <span>Quản Lý Tài Khoản Hệ Thống ({accounts.length})</span>
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Tài khoản được lưu đồng bộ thời gian thực trên Firebase Realtime Database
+                </p>
+              </div>
+
+              {onSaveAccount && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddUserError('');
+                    setIsAddUserOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Thêm Tài Khoản Mới</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {accounts.map((acc) => (
+                <div
+                  key={acc.username}
+                  className="p-3.5 bg-slate-50/90 rounded-xl border border-slate-200/90 text-xs flex flex-col justify-between hover:border-slate-300 transition-all shadow-2xs"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 truncate text-sm">{acc.name}</span>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                          acc.role === 'admin'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : acc.role === 'storekeeper'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-blue-100 text-blue-800 border border-blue-200'
+                        }`}
+                      >
+                        {acc.role === 'admin'
+                          ? '👑 Admin'
+                          : acc.role === 'storekeeper'
+                          ? '📦 Thủ Kho'
+                          : '👷 Giám Sát'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-0.5 text-slate-600">
+                      <div className="text-[11px] font-mono">
+                        User: <strong className="text-blue-700 font-bold">{acc.username}</strong>
+                      </div>
+                      {acc.phone && (
+                        <div className="text-[11px] text-slate-500">
+                          SĐT: <span className="font-medium text-slate-700">{acc.phone}</span>
+                        </div>
+                      )}
+                      {acc.lastLoginAt && (
+                        <div className="text-[10px] text-slate-500">
+                          Đăng nhập gần nhất: <span className="font-medium text-slate-600">{acc.lastLoginAt}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400 font-medium">Org: {acc.orgId || 'CT36'}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingAccount(acc);
+                          setEditRoleValue(acc.role);
+                          setEditPassValue('');
+                        }}
+                        className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
+                        title="Đổi mật khẩu / phân quyền"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      {onDeleteAccount && acc.username !== 'admin' && acc.username !== currentUser?.username && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Xác nhận xóa tài khoản "${acc.name}" (${acc.username}) khỏi cơ sở dữ liệu?`)) {
+                              onDeleteAccount(acc.username);
+                            }
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                          title="Xóa tài khoản"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* REALTIME LOGIN AUDIT LOGS SECTION */}
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <History className="w-4 h-4 text-emerald-600" />
+                  <span>Nhật Ký & Lịch Sử Đăng Nhập Realtime Database ({loginHistory.length})</span>
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Tất cả các phiên đăng nhập được lưu tự động lên cơ sở dữ liệu để theo dõi an ninh
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {onClearLoginHistory && loginHistory.length > 0 && !isConfirmingClearLogs && (
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingClearLogs(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Xóa Lịch Sử</span>
+                  </button>
+                )}
+
+                {isConfirmingClearLogs && (
+                  <div className="flex items-center gap-1.5 bg-rose-50 p-1 rounded-lg border border-rose-200">
+                    <span className="text-[11px] text-rose-700 font-semibold px-1">Xóa sạch nhật ký?</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingClearLogs(false)}
+                      className="px-2 py-0.5 bg-white text-slate-600 text-[10px] font-bold rounded cursor-pointer border border-slate-200"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearLogs}
+                      disabled={isClearingLogs}
+                      className="px-2 py-0.5 bg-rose-600 text-white text-[10px] font-bold rounded cursor-pointer disabled:opacity-50"
+                    >
+                      {isClearingLogs ? 'Đang xóa...' : 'Đồng ý'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchLoginQuery}
+                  onChange={(e) => setSearchLoginQuery(e.target.value)}
+                  placeholder="Tìm theo user, họ tên, chi nhánh hoặc ngày..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-600"
+                />
+                {searchLoginQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchLoginQuery('')}
+                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs">
+                <button
+                  type="button"
+                  onClick={() => setFilterLoginStatus('all')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    filterLoginStatus === 'all'
+                      ? 'bg-white text-slate-800 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Tất cả ({loginHistory.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterLoginStatus('success')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    filterLoginStatus === 'success'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Thành công ({loginHistory.filter((l) => l.status === 'success').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterLoginStatus('failed')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    filterLoginStatus === 'failed'
+                      ? 'bg-rose-600 text-white shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Thất bại ({loginHistory.filter((l) => l.status === 'failed').length})
+                </button>
+              </div>
+            </div>
+
+            {/* Logs Table */}
+            <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-2xs">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="px-3.5 py-2.5">Thời Gian</th>
+                    <th className="px-3.5 py-2.5">Tài Khoản & Người Dùng</th>
+                    <th className="px-3.5 py-2.5">Vai Trò & Đơn Vị</th>
+                    <th className="px-3.5 py-2.5">Thiết Bị / Nền Tảng</th>
+                    <th className="px-3.5 py-2.5 text-center">Trạng Thái</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {filteredLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                        {loginHistory.length === 0
+                          ? 'Chưa có nhật ký đăng nhập nào được ghi nhận. Hãy đăng nhập để lưu vào Realtime Database.'
+                          : 'Không tìm thấy nhật ký đăng nhập phù hợp với bộ lọc.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                          {log.timeFormatted || new Date(log.timestamp).toLocaleString('vi-VN')}
+                        </td>
+                        <td className="px-3.5 py-2.5">
+                          <div className="font-bold text-slate-900">{log.name || log.username}</div>
+                          <div className="text-[11px] text-blue-700 font-mono">@{log.username}</div>
+                        </td>
+                        <td className="px-3.5 py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`text-[10px] px-2 py-0.2 rounded font-bold uppercase ${
+                                log.role === 'admin'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : log.role === 'storekeeper'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {log.role}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono">Org: {log.orgId}</span>
+                          </div>
+                        </td>
+                        <td className="px-3.5 py-2.5">
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
+                            {log.device?.includes('Điện thoại') ? (
+                              <Smartphone className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            ) : (
+                              <Laptop className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                            )}
+                            <span className="truncate max-w-[180px]" title={log.device || log.userAgent}>
+                              {log.device || 'Máy tính (Desktop)'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
+                          {log.status === 'success' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Thành công</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" />
+                              <span>Thất bại</span>
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
-        {/* Firebase Cloud Database */}
+        {/* Modal: Add New System Account */}
+        {isAddUserOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-blue-600" />
+                  <span>Tạo Tài Khoản Người Dùng Mới</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsAddUserOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {addUserError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>{addUserError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleCreateAccountSubmit} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Họ tên nhân sự *</label>
+                  <input
+                    type="text"
+                    required
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    placeholder="VD: Nguyễn Văn Thắng"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Tên đăng nhập *</label>
+                    <input
+                      type="text"
+                      required
+                      value={addUsername}
+                      onChange={(e) => setAddUsername(e.target.value)}
+                      placeholder="VD: thangnv"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-mono font-bold text-blue-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Mật khẩu *</label>
+                    <input
+                      type="text"
+                      required
+                      value={addPassword}
+                      onChange={(e) => setAddPassword(e.target.value)}
+                      placeholder="Mật khẩu"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Phân quyền vai trò</label>
+                    <select
+                      value={addRole}
+                      onChange={(e) => setAddRole(e.target.value as any)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-semibold cursor-pointer"
+                    >
+                      <option value="admin">👑 Quản Trị Viên (Admin)</option>
+                      <option value="storekeeper">📦 Thủ Kho (Storekeeper)</option>
+                      <option value="supervisor">👷 Giám Sát (Supervisor)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Mã Đơn Vị (Org ID)</label>
+                    <input
+                      type="text"
+                      value={addOrgId}
+                      onChange={(e) => setAddOrgId(e.target.value.toUpperCase())}
+                      placeholder="CT36"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-bold uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Số điện thoại liên hệ</label>
+                  <input
+                    type="tel"
+                    value={addPhone}
+                    onChange={(e) => setAddPhone(e.target.value)}
+                    placeholder="VD: 0915 123 456"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddUserOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingUser}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isSavingUser ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    <span>Lưu Vào Realtime DB</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Edit Account Role / Password */}
+        {editingAccount && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-blue-600" />
+                  <span>Cập Nhật Tài Khoản: {editingAccount.name}</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setEditingAccount(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEditAccount} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tên đăng nhập</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editingAccount.username}
+                    className="w-full px-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-xl font-mono font-bold text-blue-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Phân quyền vai trò</label>
+                  <select
+                    value={editRoleValue}
+                    onChange={(e) => setEditRoleValue(e.target.value as any)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-semibold cursor-pointer"
+                  >
+                    <option value="admin">👑 Quản Trị Viên (Admin)</option>
+                    <option value="storekeeper">📦 Thủ Kho (Storekeeper)</option>
+                    <option value="supervisor">👷 Giám Sát (Supervisor)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Đặt lại mật khẩu mới (để trống nếu giữ nguyên)</label>
+                  <input
+                    type="text"
+                    value={editPassValue}
+                    onChange={(e) => setEditPassValue(e.target.value)}
+                    placeholder="Nhập mật khẩu mới..."
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-mono"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditingAccount(null)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEdit}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isSavingEdit ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    <span>Lưu Cập Nhật</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Firebase Cloud Realtime Database */}
         <div className="pt-4 border-t border-slate-100">
           <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
             <Database className="w-4 h-4 text-emerald-600" />
-            <span>Cơ Sở Dữ Liệu Đám Mây (Firebase Firestore)</span>
+            <span>Cơ Sở Dữ Liệu Thời Gian Thực (Firebase Realtime Database)</span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Đang kết nối
+              Đang kết nối Realtime
             </span>
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Firebase Project ID</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Realtime Database URL</label>
               <input
                 type="text"
                 disabled
-                value="chongtham36-c3c29"
-                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-800"
+                value="https://kho36manage-default-rtdb.firebaseio.com"
+                className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono font-bold text-blue-700"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Cấu hình đồng bộ</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Cấu hình đồng bộ thời gian thực</label>
               <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-xs text-emerald-800 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Tự động đồng bộ: systemConfig/company, projects, materials, exportedGoods, laborLogs, staff</span>
+                <span>Dự án: kho36manage • Tự động đồng bộ Realtime Database</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Database Management & Clean */}
-        {onClearAllData && (
+        {(onClearAllData || onSeedSampleData) && (
           <div className="pt-4 border-t border-slate-100">
             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2">
-              <Trash2 className="w-4 h-4 text-rose-600" />
-              <span>Quản Lý & Làm Sạch Dữ Liệu</span>
+              <Database className="w-4 h-4 text-blue-600" />
+              <span>Quản Lý Dữ Liệu & Đồng Bộ Đám Mây</span>
             </h3>
-            <p className="text-xs text-slate-500 mb-3">
-              Xóa toàn bộ các bản ghi hoặc khởi tạo lại cơ sở dữ liệu trống sạch để bắt đầu nhập liệu thực tế
+            <p className="text-xs text-slate-500 mb-4">
+              Nạp lại bộ dữ liệu chuẩn chống thấm thực tế (Dự án, Vật tư, Phiếu xuất, Chấm công, Nhân sự) lên Firebase Realtime Database hoặc xóa sạch để nhập mới.
             </p>
 
-            {clearedSuccess && (
-              <div className="mb-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2 font-medium">
+            {seedSuccess && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2 font-medium animate-in fade-in">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <span>Đã nạp và đồng bộ toàn bộ dữ liệu mẫu lên Firebase Realtime Database thành công! Dữ liệu đã hiển thị trên tất cả màn hình.</span>
+              </div>
+            )}
+
+            {clearedSuccess && (
+              <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2 font-medium animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-amber-600 flex-shrink-0" />
                 <span>Đã xóa toàn bộ dữ liệu thành công! Cơ sở dữ liệu hiện đã hoàn toàn trống sạch.</span>
               </div>
             )}
 
-            {!isConfirmingClear ? (
-              <button
-                type="button"
-                id="trigger-clear-all-data-btn"
-                onClick={() => setIsConfirmingClear(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Xóa toàn bộ dữ liệu dự án & kho (Reset sạch)</span>
-              </button>
-            ) : (
-              <div className="p-4 rounded-xl bg-rose-50/80 border border-rose-200 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {onSeedSampleData && (
+                <button
+                  type="button"
+                  id="seed-sample-data-btn"
+                  disabled={isSeeding}
+                  onClick={handleSeed}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-[0.98] disabled:opacity-50"
+                >
+                  {isSeeding ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Đang nạp lên Realtime DB...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-blue-600" />
+                      <span>Nạp lại dữ liệu thực tế mẫu lên Realtime Database</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {onClearAllData && !isConfirmingClear && (
+                <button
+                  type="button"
+                  id="trigger-clear-all-data-btn"
+                  onClick={() => setIsConfirmingClear(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Xóa toàn bộ dữ liệu dự án & kho (Reset sạch)</span>
+                </button>
+              )}
+            </div>
+
+            {onClearAllData && isConfirmingClear && (
+              <div className="mt-3 p-4 rounded-xl bg-rose-50/80 border border-rose-200 space-y-3">
                 <div className="flex items-start gap-2.5">
                   <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
                   <div>
                     <h4 className="text-xs font-bold text-rose-900">
-                      Xác nhận xóa sạch dữ liệu khỏi Firestore?
+                      Xác nhận xóa sạch dữ liệu khỏi Realtime Database?
                     </h4>
                     <p className="text-[11px] text-rose-700 mt-0.5">
                       Thao tác này sẽ xóa tất cả công trình, vật tư, phiếu xuất kho, nhật ký chấm công và nhân sự trong cơ sở dữ liệu đám mây. Thao tác không thể hoàn tác.
@@ -622,7 +1448,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     {isClearing ? (
                       <>
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Đang xóa khỏi Firestore...</span>
+                        <span>Đang xóa khỏi Realtime DB...</span>
                       </>
                     ) : (
                       <>

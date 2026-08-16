@@ -8,6 +8,7 @@ interface NewExportModalProps {
   projects: ConstructionProject[];
   materials: MaterialItem[];
   onAddExport: (item: ExportedGood) => void;
+  initialProjectName?: string;
 }
 
 export const NewExportModal: React.FC<NewExportModalProps> = ({
@@ -16,14 +17,23 @@ export const NewExportModal: React.FC<NewExportModalProps> = ({
   projects,
   materials,
   onAddExport,
+  initialProjectName,
 }) => {
   const [selectedMaterialId, setSelectedMaterialId] = useState(materials[0]?.id || '');
-  const [selectedProjectName, setSelectedProjectName] = useState(projects[0]?.name || '');
+  const [selectedProjectName, setSelectedProjectName] = useState(initialProjectName || projects[0]?.name || '');
   const [quantity, setQuantity] = useState<number>(1);
   const [recipient, setRecipient] = useState('Chỉ huy công trường');
   const [unitPrice, setUnitPrice] = useState<number>(
     materials[0]?.defaultPrice || 720000
   );
+
+  React.useEffect(() => {
+    if (initialProjectName) {
+      setSelectedProjectName(initialProjectName);
+    } else if (projects.length > 0 && !selectedProjectName) {
+      setSelectedProjectName(projects[0].name);
+    }
+  }, [initialProjectName, isOpen, projects]);
 
   if (!isOpen) return null;
 
