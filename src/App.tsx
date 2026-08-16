@@ -38,6 +38,8 @@ import {
   updateProjectInFirestore,
   deleteProjectFromFirestore,
   addMaterialToFirestore,
+  updateMaterialInFirestore,
+  batchSaveMaterialsToFirestore,
   deleteMaterialFromFirestore,
   addExportedGoodToFirestore,
   addLaborLogToFirestore,
@@ -110,7 +112,9 @@ export default function App() {
   const [editingProject, setEditingProject] = useState<ConstructionProject | null>(null);
   const [isNewExportOpen, setIsNewExportOpen] = useState(false);
   const [exportInitialProject, setExportInitialProject] = useState<string | undefined>(undefined);
+  const [exportInitialMaterialId, setExportInitialMaterialId] = useState<string | undefined>(undefined);
   const [isLaborDetailOpen, setIsLaborDetailOpen] = useState(false);
+  const [laborInitialProject, setLaborInitialProject] = useState<string | undefined>(undefined);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
 
   // Toast notification
@@ -281,6 +285,18 @@ export default function App() {
     showToast(`Đã lưu vật tư "${newMat.name}" lên Realtime Database`);
   };
 
+  const handleUpdateMaterial = async (updatedMat: MaterialItem) => {
+    setMaterials((prev) => prev.map((m) => (m.id === updatedMat.id ? updatedMat : m)));
+    await updateMaterialInFirestore(updatedMat);
+    showToast(`Đã cập nhật vật tư "${updatedMat.name}" trên Realtime Database`);
+  };
+
+  const handleBatchSaveMaterials = async (newMaterialsList: MaterialItem[]) => {
+    setMaterials(newMaterialsList);
+    await batchSaveMaterialsToFirestore(newMaterialsList);
+    showToast(`Đã đồng bộ ${newMaterialsList.length} mặt hàng lên Realtime Database`);
+  };
+
   const handleDeleteMaterial = async (materialId: string) => {
     setMaterials((prev) => prev.filter((m) => m.id !== materialId));
     await deleteMaterialFromFirestore(materialId);
@@ -338,7 +354,15 @@ export default function App() {
   };
 
   const handleAddStaff = async (newStaff: StaffMember) => {
-    setStaff((prev) => [newStaff, ...prev]);
+    setStaff((prev) => {
+      const idx = prev.findIndex((s) => s.id === newStaff.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = newStaff;
+        return next;
+      }
+      return [newStaff, ...prev];
+    });
     await addStaffToFirestore(newStaff);
     showToast(`Đã lưu nhân sự "${newStaff.name}" lên Realtime Database`);
   };
@@ -450,7 +474,7 @@ export default function App() {
 
             <div className="hidden sm:block">
               <h2 className="text-sm font-bold text-slate-800 capitalize">
-                {activeTab === 'dashboard' && 'Tổng quan công trường'}
+                {activeTab === 'dashboard' && 'Tổng quan'}
                 {activeTab === 'projects' && 'Danh mục công trình'}
                 {activeTab === 'materials' && 'Vật tư & Định mức'}
                 {activeTab === 'staff' && 'Nhân sự & Thợ thi công'}
@@ -525,6 +549,10 @@ export default function App() {
               projects={projects}
               onOpenLaborDetail={() => setIsLaborDetailOpen(true)}
               onOpenNewExport={() => setIsNewExportOpen(true)}
+              onOpenNewProject={() => {
+                setEditingProject(null);
+                setIsNewProjectOpen(true);
+              }}
             />
           )}
 
@@ -534,6 +562,7 @@ export default function App() {
               exportedGoods={exportedGoods}
               laborLogs={laborLogs}
               staff={staff}
+              companySettings={companySettings}
               onOpenNewProject={() => {
                 setEditingProject(null);
                 setIsNewProjectOpen(true);
@@ -543,9 +572,14 @@ export default function App() {
                 setIsNewProjectOpen(true);
               }}
               onDeleteProject={handleDeleteProject}
+              onSaveProject={handleSaveProject}
               onOpenExportForProject={(proj) => {
                 setExportInitialProject(proj.name);
                 setIsNewExportOpen(true);
+              }}
+              onOpenLaborForProject={(proj) => {
+                setLaborInitialProject(proj.name);
+                setIsLaborDetailOpen(true);
               }}
             />
           )}
@@ -553,9 +587,20 @@ export default function App() {
           {activeTab === 'materials' && (
             <MaterialsView
               materials={materials}
-              onOpenNewExport={() => setIsNewExportOpen(true)}
+              exportedGoods={exportedGoods}
+              companySettings={companySettings}
+              onOpenNewExport={() => {
+                setExportInitialMaterialId(undefined);
+                setIsNewExportOpen(true);
+              }}
+              onOpenExportForMaterial={(mat) => {
+                setExportInitialMaterialId(mat.id);
+                setIsNewExportOpen(true);
+              }}
               onAddMaterial={handleAddMaterial}
+              onUpdateMaterial={handleUpdateMaterial}
               onDeleteMaterial={handleDeleteMaterial}
+              onBatchSaveMaterials={handleBatchSaveMaterials}
             />
           )}
 
@@ -602,18 +647,25 @@ export default function App() {
         onClose={() => {
           setIsNewExportOpen(false);
           setExportInitialProject(undefined);
+          setExportInitialMaterialId(undefined);
         }}
         projects={projects}
         materials={materials}
         onAddExport={handleAddExport}
         initialProjectName={exportInitialProject}
+        initialMaterialId={exportInitialMaterialId}
       />
 
       <LaborDetailModal
         isOpen={isLaborDetailOpen}
-        onClose={() => setIsLaborDetailOpen(false)}
+        onClose={() => {
+          setIsLaborDetailOpen(false);
+          setLaborInitialProject(undefined);
+        }}
         laborLogs={laborLogs}
         onAddLaborLog={handleAddLaborLog}
+        projects={projects}
+        initialProjectName={laborInitialProject}
       />
 
       <SupportModal

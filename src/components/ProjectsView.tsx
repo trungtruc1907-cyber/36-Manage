@@ -10,34 +10,33 @@ import {
   Database,
   Trash2,
   Edit2,
-  Phone,
-  UserCheck,
-  Tag,
-  DollarSign,
-  TrendingUp,
-  HardHat,
   ArrowUpRight,
-  ExternalLink,
-  Filter,
   LayoutGrid,
   List,
-  Layers,
-  FileText,
   Package,
   X,
-  Sparkles,
+  Coins,
+  ShieldCheck,
+  Award,
+  Users,
+  Printer,
+  FileSpreadsheet,
 } from 'lucide-react';
-import { ConstructionProject, ExportedGood, LaborDailyLog, StaffMember } from '../types';
+import { ConstructionProject, ExportedGood, LaborDailyLog, StaffMember, CompanySettings } from '../types';
+import { exportProjectToExcel, printProjectReport } from '../utils/projectExportUtils';
 
 interface ProjectsViewProps {
   projects: ConstructionProject[];
   exportedGoods?: ExportedGood[];
   laborLogs?: LaborDailyLog[];
   staff?: StaffMember[];
+  companySettings?: CompanySettings;
   onOpenNewProject: () => void;
   onEditProject?: (project: ConstructionProject) => void;
   onDeleteProject?: (id: string) => Promise<void> | void;
+  onSaveProject?: (project: ConstructionProject) => Promise<void> | void;
   onOpenExportForProject?: (project: ConstructionProject) => void;
+  onOpenLaborForProject?: (project: ConstructionProject) => void;
 }
 
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
@@ -45,17 +44,24 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   exportedGoods = [],
   laborLogs = [],
   staff = [],
+  companySettings,
   onOpenNewProject,
   onEditProject,
   onDeleteProject,
+  onSaveProject,
   onOpenExportForProject,
+  onOpenLaborForProject,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [selectedProjectDetail, setSelectedProjectDetail] = useState<ConstructionProject | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Quick Complete Popup state
+  const [projectToComplete, setProjectToComplete] = useState<ConstructionProject | null>(null);
+  const [quickCompletedValueInput, setQuickCompletedValueInput] = useState<string>('');
+  const [isSavingCompletion, setIsSavingCompletion] = useState(false);
 
   // Helper format currency
   const formatCurrency = (val: number | undefined) =>
@@ -79,12 +85,15 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     );
     const calculatedWorkdays = projectLabor.reduce((sum, item) => sum + (item.totalWorkdays || 0), 0);
     const totalWorkdays = calculatedWorkdays > 0 ? calculatedWorkdays : proj.workdaysLogged || 0;
+    const totalLaborCost = projectLabor.reduce((sum, item) => sum + (item.totalCost || 0), 0);
 
     return {
       exportsList: projectExports,
       laborList: projectLabor,
       totalExportsVal: totalExports,
+      totalExportsValue: totalExports,
       totalWorkdays: totalWorkdays,
+      totalLaborCost: totalLaborCost,
     };
   };
 
@@ -96,9 +105,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       p.name.toLowerCase().includes(search) ||
       p.partner.toLowerCase().includes(search) ||
       p.code.toLowerCase().includes(search) ||
-      (p.address && p.address.toLowerCase().includes(search)) ||
-      (p.supervisor && p.supervisor.toLowerCase().includes(search)) ||
-      (p.category && p.category.toLowerCase().includes(search));
+      (p.address && p.address.toLowerCase().includes(search));
 
     const matchesStatus =
       statusFilter === 'all' ||
@@ -106,10 +113,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       (statusFilter === 'pending' && p.status === 'pending') ||
       (statusFilter === 'completed' && p.status === 'completed');
 
-    const matchesCategory =
-      categoryFilter === 'all' || (p.category && p.category.includes(categoryFilter));
-
-    return matchesSearch && matchesStatus && matchesCategory;
+    return matchesSearch && matchesStatus;
   });
 
   // Aggregate stats across all projects
@@ -118,12 +122,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const pendingCount = projects.filter((p) => p.status === 'pending').length;
   const completedCount = projects.filter((p) => p.status === 'completed').length;
   const totalSystemExports = exportedGoods.reduce((sum, e) => sum + (e.totalPrice || 0), 0);
-  const totalSystemLabor = laborLogs.reduce((sum, l) => sum + (l.totalWorkdays || 0), 0);
-
-  // Extract unique categories
-  const categoriesList = Array.from(
-    new Set(projects.map((p) => p.category).filter(Boolean))
-  ) as string[];
+  const totalCompletedVal = projects
+    .filter((p) => p.status === 'completed' && p.completedValue)
+    .reduce((sum, p) => sum + (p.completedValue || 0), 0);
 
   const handleDeleteConfirm = async (id: string, name: string) => {
     if (window.confirm(`Xác nhận xóa công trình "${name}" khỏi cơ sở dữ liệu Firebase?`)) {
@@ -136,6 +137,33 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         setSelectedProjectDetail(null);
       }
     }
+  };
+
+  // Open Quick Complete Dialog
+  const handleOpenCompleteModal = (proj: ConstructionProject) => {
+    setProjectToComplete(proj);
+    setQuickCompletedValueInput(proj.completedValue ? String(proj.completedValue) : '');
+  };
+
+  // Save completion value
+  const handleSaveQuickCompletion = async () => {
+    if (!projectToComplete) return;
+    setIsSavingCompletion(true);
+    const cleanNum = Number(quickCompletedValueInput.replace(/\D/g, '')) || 0;
+    const updatedProject: ConstructionProject = {
+      ...projectToComplete,
+      status: 'completed',
+      completedValue: cleanNum,
+    };
+
+    if (onSaveProject) {
+      await onSaveProject(updatedProject);
+    }
+    if (selectedProjectDetail?.id === updatedProject.id) {
+      setSelectedProjectDetail(updatedProject);
+    }
+    setIsSavingCompletion(false);
+    setProjectToComplete(null);
   };
 
   return (
@@ -158,7 +186,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Dữ liệu công trình, đối tác, địa chỉ thi công và tiến độ vật tư được lưu trữ đồng bộ thời gian thực
+                Quản lý tiến độ công trình, giá trị hoàn thành nghiệm thu và vật tư xuất kho theo thời gian thực
               </p>
             </div>
           </div>
@@ -175,7 +203,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       </div>
 
       {/* KPI Stats Summary Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs">
           <div className="text-[11px] font-semibold text-slate-500">Tổng Công Trình</div>
           <div className="text-xl font-bold text-slate-900 mt-1">{totalProjectsCount}</div>
@@ -209,16 +237,29 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           <div className="text-[10px] text-blue-600/80 mt-0.5">Hoàn thành</div>
         </div>
 
-        <div className="p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs sm:col-span-2 lg:col-span-2">
+        <div className="p-3.5 bg-white rounded-2xl border border-indigo-100 shadow-2xs bg-gradient-to-br from-indigo-50/50 to-white">
+          <div className="text-[11px] font-semibold text-indigo-700 flex items-center justify-between">
+            <span>Tổng Giá Trị Nghiệm Thu</span>
+            <Coins className="w-3.5 h-3.5 text-indigo-600" />
+          </div>
+          <div className="text-lg font-bold text-indigo-800 mt-1 truncate">
+            {formatCurrency(totalCompletedVal)} đ
+          </div>
+          <div className="text-[10px] text-indigo-600/80 mt-0.5">
+            {completedCount} công trình xong
+          </div>
+        </div>
+
+        <div className="p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs">
           <div className="text-[11px] font-semibold text-slate-500 flex items-center justify-between">
-            <span>Tổng Giá Trị Vật Tư Xuất Ra</span>
+            <span>Vật Tư Đã Xuất</span>
             <Package className="w-3.5 h-3.5 text-blue-600" />
           </div>
-          <div className="text-lg font-bold text-blue-700 mt-1">
+          <div className="text-lg font-bold text-blue-700 mt-1 truncate">
             {formatCurrency(totalSystemExports)} đ
           </div>
           <div className="text-[10px] text-slate-400 mt-0.5">
-            Lũy kế {exportedGoods.length} phiếu xuất kho
+            {exportedGoods.length} phiếu xuất kho
           </div>
         </div>
       </div>
@@ -270,7 +311,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Đã Hoàn Thành ({completedCount})
+              Đã Nghiệm Thu ({completedCount})
             </button>
           </div>
 
@@ -303,44 +344,24 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           </div>
         </div>
 
-        {/* Search & Category Filter Row */}
-        <div className="flex flex-wrap items-center gap-2.5 pt-1">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Tìm theo tên công trình, mã dự án, đối tác, địa chỉ, chỉ huy trưởng..."
-              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-slate-800 placeholder:text-slate-400 focus:border-blue-600 outline-none transition-colors"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {categoriesList.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:bg-white focus:border-blue-600 outline-none cursor-pointer"
-              >
-                <option value="all">Tất cả hạng mục</option>
-                {categoriesList.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {/* Search */}
+        <div className="relative w-full">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Tìm kiếm theo tên công trình, mã dự án, đối tác / chủ đầu tư, địa chỉ thi công..."
+            className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-slate-800 placeholder:text-slate-400 focus:border-blue-600 outline-none transition-colors"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
       </div>
@@ -366,11 +387,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold font-mono uppercase tracking-wider">
                           {proj.code}
                         </span>
-                        {proj.category && (
-                          <span className="text-[10px] text-slate-500 font-medium truncate max-w-[130px]" title={proj.category}>
-                            • {proj.category}
-                          </span>
-                        )}
                       </div>
                       <h3
                         onClick={() => setSelectedProjectDetail(proj)}
@@ -384,25 +400,35 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
                     <div className="flex-shrink-0">
                       {isCompleted ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCompleteModal(proj)}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 cursor-pointer"
+                          title="Bấm để chỉnh sửa giá trị hoàn thành"
+                        >
                           <CheckCircle2 className="w-3 h-3 text-blue-600" />
                           <span>Đã xong</span>
-                        </span>
+                        </button>
                       ) : isPending ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                           <Clock className="w-3 h-3 text-amber-600" />
                           <span>Chuẩn bị</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCompleteModal(proj)}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors cursor-pointer"
+                          title="Bấm để nghiệm thu công trình"
+                        >
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                           <span>Đang thi công</span>
-                        </span>
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Location & Supervisor info */}
+                  {/* Location & Start Date info */}
                   <div className="space-y-1.5 text-xs text-slate-600 pt-1">
                     <div className="flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
@@ -416,23 +442,34 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                         <span>Khởi công: <strong>{proj.startDate}</strong></span>
                       </div>
-                      {proj.supervisor && (
-                        <div className="flex items-center gap-1 text-slate-500 font-medium">
-                          <UserCheck className="w-3 h-3 text-slate-400" />
-                          <span className="truncate max-w-[100px]" title={proj.supervisor}>
-                            {proj.supervisor}
+                    </div>
+                  </div>
+
+                  {/* COMPLETED VALUE HIGHLIGHT (Visible when completed) */}
+                  {isCompleted && (
+                    <div className="p-2.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50/80 border border-blue-200 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-md bg-blue-600 text-white flex items-center justify-center">
+                          <Coins className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-blue-900 block leading-tight">
+                            Tổng giá trị hoàn thành:
+                          </span>
+                          <span className="font-extrabold text-blue-700 text-xs">
+                            {proj.completedValue ? `${formatCurrency(proj.completedValue)} đ` : 'Chưa nhập giá trị'}
                           </span>
                         </div>
-                      )}
-                    </div>
-
-                    {proj.phone && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                        <Phone className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                        <span>Hotline: <strong className="text-slate-700">{proj.phone}</strong></span>
                       </div>
-                    )}
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCompleteModal(proj)}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-bold underline cursor-pointer"
+                      >
+                        Sửa
+                      </button>
+                    </div>
+                  )}
 
                   {/* Material & Workdays metric */}
                   <div className="pt-2.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
@@ -463,6 +500,18 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   </button>
 
                   <div className="flex items-center gap-1">
+                    {!isCompleted && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCompleteModal(proj)}
+                        className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1"
+                        title="Nghiệm thu công trình"
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                        <span>Nghiệm thu</span>
+                      </button>
+                    )}
+
                     {onOpenExportForProject && (
                       <button
                         type="button"
@@ -472,6 +521,18 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       >
                         <Package className="w-3 h-3" />
                         <span>Xuất kho</span>
+                      </button>
+                    )}
+
+                    {onOpenLaborForProject && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenLaborForProject(proj)}
+                        className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1"
+                        title="Chấm công nhân công cho công trình này"
+                      >
+                        <Users className="w-3 h-3" />
+                        <span>Chấm công</span>
                       </button>
                     )}
 
@@ -527,11 +588,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px] tracking-wider">
                 <tr>
                   <th className="px-4 py-3">Mã & Công Trình</th>
-                  <th className="px-4 py-3">Hạng Mục & Đối Tác</th>
-                  <th className="px-4 py-3">Địa Chỉ & Phụ Trách</th>
+                  <th className="px-4 py-3">Chủ Đầu Tư & Địa Chỉ</th>
                   <th className="px-4 py-3">Khởi Công</th>
                   <th className="px-4 py-3 text-right">Vật Tư Xuất</th>
                   <th className="px-4 py-3 text-center">Công Nhật</th>
+                  <th className="px-4 py-3 text-right">Giá Trị Hoàn Thành</th>
                   <th className="px-4 py-3 text-center">Trạng Thái</th>
                   <th className="px-4 py-3 text-center">Thao Tác</th>
                 </tr>
@@ -546,6 +607,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 ) : (
                   filteredProjects.map((proj) => {
                     const stats = getProjectLiveStats(proj);
+                    const isCompleted = proj.status === 'completed';
                     return (
                       <tr key={proj.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="px-4 py-3">
@@ -558,17 +620,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         </td>
                         <td className="px-4 py-3">
                           <div className="font-medium text-slate-800">{proj.partner}</div>
-                          <div className="text-[11px] text-slate-500">{proj.category || 'Chống thấm'}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="text-slate-700 max-w-[200px] truncate" title={proj.address}>
-                            {proj.address}
-                          </div>
-                          {proj.supervisor && (
-                            <div className="text-[11px] text-slate-500 font-medium">
-                              PT: {proj.supervisor} {proj.phone ? `(${proj.phone})` : ''}
-                            </div>
-                          )}
+                          <div className="text-[11px] text-slate-500 max-w-[200px] truncate" title={proj.address}>{proj.address}</div>
                         </td>
                         <td className="px-4 py-3 font-mono text-[11px] whitespace-nowrap text-slate-600">
                           {proj.startDate}
@@ -579,23 +631,50 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         <td className="px-4 py-3 text-center font-bold text-blue-700 whitespace-nowrap">
                           {stats.totalWorkdays} Công
                         </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          {isCompleted ? (
+                            <span className="font-bold text-blue-800 font-mono">
+                              {proj.completedValue ? `${formatCurrency(proj.completedValue)} đ` : 'Đã nghiệm thu'}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[11px] italic">Đang thi công</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-center whitespace-nowrap">
                           {proj.status === 'completed' ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCompleteModal(proj)}
+                              className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 cursor-pointer"
+                            >
                               Đã xong
-                            </span>
+                            </button>
                           ) : proj.status === 'pending' ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
                               Chuẩn bị
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCompleteModal(proj)}
+                              className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-blue-50 hover:text-blue-700 transition-colors cursor-pointer"
+                            >
                               Đang thi công
-                            </span>
+                            </button>
                           )}
                         </td>
                         <td className="px-4 py-3 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1">
+                            {!isCompleted && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCompleteModal(proj)}
+                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                title="Nghiệm thu công trình"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             {onOpenExportForProject && (
                               <button
                                 type="button"
@@ -604,6 +683,16 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                 title="Xuất kho"
                               >
                                 <Package className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {onOpenLaborForProject && (
+                              <button
+                                type="button"
+                                onClick={() => onOpenLaborForProject(proj)}
+                                className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                title="Chấm công công trình"
+                              >
+                                <Users className="w-3.5 h-3.5" />
                               </button>
                             )}
                             {onEditProject && (
@@ -641,191 +730,466 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       {/* PROJECT DETAIL MODAL / DRAWER */}
       {selectedProjectDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in duration-200 my-8">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in duration-200 my-8">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shadow-xs">
-                  <Building2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                      {selectedProjectDetail.code}
-                    </span>
-                    <h3 className="font-bold text-slate-900 text-base">{selectedProjectDetail.name}</h3>
-                  </div>
-                  <p className="text-xs text-slate-500">{selectedProjectDetail.partner}</p>
-                </div>
-              </div>
+            {(() => {
+              const stats = getProjectLiveStats(selectedProjectDetail);
+              return (
+                <>
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70 shrink-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shadow-xs">
+                        <Building2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                            {selectedProjectDetail.code}
+                          </span>
+                          <h3 className="font-bold text-slate-900 text-base">{selectedProjectDetail.name}</h3>
+                        </div>
+                        <p className="text-xs text-slate-500">{selectedProjectDetail.partner}</p>
+                      </div>
+                    </div>
 
-              <div className="flex items-center gap-2">
-                {onEditProject && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const p = selectedProjectDetail;
-                      setSelectedProjectDetail(null);
-                      onEditProject(p);
-                    }}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Sửa</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setSelectedProjectDetail(null)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+                    <div className="flex items-center gap-2">
+                      {/* Nút In */}
+                      <button
+                        type="button"
+                        onClick={() => printProjectReport(selectedProjectDetail, stats.exportsList, stats.laborList, companySettings)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+                        title="In báo cáo chi tiết công trình"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-slate-600" />
+                        <span>In Báo Cáo</span>
+                      </button>
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-5 text-xs">
-              {/* Basic Details Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Hạng mục chính:</span>
-                  <span className="font-bold text-slate-800 block mt-0.5">
-                    {selectedProjectDetail.category || 'Chống thấm chuyên sâu'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Địa chỉ công trường:</span>
-                  <span className="font-bold text-slate-800 block mt-0.5">
-                    {selectedProjectDetail.address || 'TP. Hồ Chí Minh'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Người phụ trách / SĐT:</span>
-                  <span className="font-bold text-slate-800 block mt-0.5">
-                    {selectedProjectDetail.supervisor || 'Chưa phân công'}{' '}
-                    {selectedProjectDetail.phone ? `(${selectedProjectDetail.phone})` : ''}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Thời gian:</span>
-                  <span className="font-bold text-slate-800 block mt-0.5">
-                    {selectedProjectDetail.startDate}{' '}
-                    {selectedProjectDetail.endDate ? `-> ${selectedProjectDetail.endDate}` : ''}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Dự toán ngân sách:</span>
-                  <span className="font-bold text-slate-800 block mt-0.5">
-                    {selectedProjectDetail.budget
-                      ? `${formatCurrency(selectedProjectDetail.budget)} đ`
-                      : 'Chưa thiết lập'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[11px] block">Trạng thái:</span>
-                  <span className="font-bold text-emerald-700 block mt-0.5 uppercase">
-                    {selectedProjectDetail.status === 'completed'
-                      ? 'Đã nghiệm thu'
-                      : selectedProjectDetail.status === 'pending'
-                      ? 'Sắp khởi công'
-                      : 'Đang thi công'}
-                  </span>
-                </div>
-              </div>
+                      {/* Nút Xuất file Excel */}
+                      <button
+                        type="button"
+                        onClick={() => exportProjectToExcel(selectedProjectDetail, stats.exportsList, stats.laborList, companySettings)}
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+                        title="Xuất file Excel báo cáo công trình"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Xuất File Excel</span>
+                      </button>
 
-              {selectedProjectDetail.notes && (
-                <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-100 text-slate-700">
-                  <span className="font-bold text-blue-900 text-[11px] block mb-0.5">
-                    Yêu cầu kỹ thuật & Ghi chú:
-                  </span>
-                  <p>{selectedProjectDetail.notes}</p>
-                </div>
-              )}
+                      {selectedProjectDetail.status !== 'completed' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const p = selectedProjectDetail;
+                            handleOpenCompleteModal(p);
+                          }}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>Nghiệm thu</span>
+                        </button>
+                      )}
 
-              {/* Material Exports for this Project */}
-              {(() => {
-                const stats = getProjectLiveStats(selectedProjectDetail);
-                return (
-                  <div className="space-y-3 pt-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
-                        <Package className="w-4 h-4 text-blue-600" />
-                        <span>Danh Sách Vật Tư Đã Xuất Đến Công Trình ({stats.exportsList.length})</span>
-                      </h4>
-                      {onOpenExportForProject && (
+                      {onEditProject && (
                         <button
                           type="button"
                           onClick={() => {
                             const p = selectedProjectDetail;
                             setSelectedProjectDetail(null);
-                            onOpenExportForProject(p);
+                            onEditProject(p);
                           }}
-                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
                         >
-                          <Plus className="w-3 h-3" />
-                          <span>Xuất Thêm Vật Tư</span>
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Sửa</span>
                         </button>
                       )}
-                    </div>
 
-                    <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-56 overflow-y-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px]">
-                          <tr>
-                            <th className="px-3.5 py-2">Ngày</th>
-                            <th className="px-3.5 py-2">Vật Tư Chống Thấm</th>
-                            <th className="px-3.5 py-2 text-right">Số Lượng</th>
-                            <th className="px-3.5 py-2 text-right">Thành Tiền</th>
-                            <th className="px-3.5 py-2">Người Nhận</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {stats.exportsList.length === 0 ? (
-                            <tr>
-                              <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
-                                Chưa có phiếu xuất vật tư nào cho dự án này.
-                              </td>
-                            </tr>
-                          ) : (
-                            stats.exportsList.map((exp) => (
-                              <tr key={exp.id} className="hover:bg-slate-50">
-                                <td className="px-3.5 py-2 font-mono text-[11px] text-slate-500">
-                                  {exp.date}
-                                </td>
-                                <td className="px-3.5 py-2 font-bold text-slate-900">
-                                  {exp.materialName}
-                                </td>
-                                <td className="px-3.5 py-2 text-right font-medium">
-                                  {exp.quantity} {exp.unit}
-                                </td>
-                                <td className="px-3.5 py-2 text-right font-bold text-blue-700">
-                                  {formatCurrency(exp.totalPrice)} đ
-                                </td>
-                                <td className="px-3.5 py-2 text-slate-600">{exp.recipient}</td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProjectDetail(null)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
                     </div>
                   </div>
-                );
-              })()}
-            </div>
 
-            {/* Modal Footer */}
-            <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between">
-              <span className="text-[11px] text-slate-400">
-                ID Cơ sở dữ liệu: <strong className="font-mono">{selectedProjectDetail.id}</strong>
-              </span>
+                  {/* Modal Body (Scrollable) */}
+                  <div className="p-6 space-y-6 text-xs overflow-y-auto flex-1">
+                    {/* Basic Details Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                      <div>
+                        <span className="text-slate-400 text-[11px] block">Chủ đầu tư / Đối tác:</span>
+                        <span className="font-bold text-slate-800 block mt-0.5">
+                          {selectedProjectDetail.partner || 'Chủ đầu tư'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-[11px] block">Địa chỉ công trường:</span>
+                        <span className="font-bold text-slate-800 block mt-0.5">
+                          {selectedProjectDetail.address || 'TP. Hồ Chí Minh'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-[11px] block">Ngày khởi công:</span>
+                        <span className="font-bold text-slate-800 block mt-0.5">
+                          {selectedProjectDetail.startDate}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 text-[11px] block">Trạng thái công trình:</span>
+                        <span className="font-bold text-emerald-700 block mt-0.5 uppercase">
+                          {selectedProjectDetail.status === 'completed'
+                            ? 'Đã nghiệm thu & Hoàn thành'
+                            : selectedProjectDetail.status === 'pending'
+                            ? 'Sắp khởi công'
+                            : 'Đang thi công'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Summary Metric Counters */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-100 flex items-center justify-between">
+                        <div>
+                          <span className="text-[11px] text-blue-700 font-semibold block">Vật Tư Xuất Kho</span>
+                          <span className="text-base font-extrabold text-blue-900 font-mono">
+                            {formatCurrency(stats.totalExportsValue)} đ
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[11px] text-slate-500 block">Số phiếu</span>
+                          <span className="font-bold text-slate-800">{stats.exportsList.length} lượt</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-100 flex items-center justify-between">
+                        <div>
+                          <span className="text-[11px] text-amber-800 font-semibold block">Tổng Ngày Công Thợ</span>
+                          <span className="text-base font-extrabold text-amber-900 font-mono">
+                            {stats.totalWorkdays} Công
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[11px] text-slate-500 block">Tiền công</span>
+                          <span className="font-bold text-amber-900">{formatCurrency(stats.totalLaborCost)} đ</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-100 flex items-center justify-between">
+                        <div>
+                          <span className="text-[11px] text-emerald-800 font-semibold block">Giá Trị Hoàn Thành</span>
+                          <span className="text-base font-extrabold text-emerald-900 font-mono">
+                            {selectedProjectDetail.completedValue ? `${formatCurrency(selectedProjectDetail.completedValue)} đ` : 'Chưa nghiệm thu'}
+                          </span>
+                        </div>
+                        {selectedProjectDetail.status === 'completed' && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCompleteModal(selectedProjectDetail)}
+                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[10px] font-bold cursor-pointer"
+                          >
+                            Đổi
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Completed Value Highlight banner if completed */}
+                    {selectedProjectDetail.status === 'completed' && (
+                      <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                            <Award className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-semibold text-blue-900 block">
+                              Tổng Giá Trị Nghiệm Thu Hoàn Thành
+                            </span>
+                            <span className="text-base font-extrabold text-blue-700 font-mono">
+                              {selectedProjectDetail.completedValue
+                                ? `${formatCurrency(selectedProjectDetail.completedValue)} VNĐ`
+                                : 'Chưa thiết lập giá trị'}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCompleteModal(selectedProjectDetail)}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs cursor-pointer transition-colors shadow-xs"
+                        >
+                          Chỉnh sửa giá trị
+                        </button>
+                      </div>
+                    )}
+
+                    {selectedProjectDetail.notes && (
+                      <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-100 text-slate-700">
+                        <span className="font-bold text-blue-900 text-[11px] block mb-0.5">
+                          Ghi chú công trình:
+                        </span>
+                        <p>{selectedProjectDetail.notes}</p>
+                      </div>
+                    )}
+
+                    {/* Section 1: Material Exports for this Project */}
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <Package className="w-4 h-4 text-blue-600" />
+                          <span>Danh Sách Vật Tư Đã Xuất Đến Công Trình ({stats.exportsList.length})</span>
+                        </h4>
+                        {onOpenExportForProject && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = selectedProjectDetail;
+                              setSelectedProjectDetail(null);
+                              onOpenExportForProject(p);
+                            }}
+                            className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer shadow-xs"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Xuất Thêm Vật Tư</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-52 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px] sticky top-0">
+                            <tr>
+                              <th className="px-3.5 py-2">Ngày</th>
+                              <th className="px-3.5 py-2">Vật Tư Chống Thấm</th>
+                              <th className="px-3.5 py-2 text-right">Số Lượng</th>
+                              <th className="px-3.5 py-2 text-right">Thành Tiền</th>
+                              <th className="px-3.5 py-2">Người Nhận</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {stats.exportsList.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-3 py-5 text-center text-slate-400">
+                                  Chưa có phiếu xuất vật tư nào cho dự án này.
+                                </td>
+                              </tr>
+                            ) : (
+                              stats.exportsList.map((exp) => (
+                                <tr key={exp.id} className="hover:bg-slate-50">
+                                  <td className="px-3.5 py-2 font-mono text-[11px] text-slate-500">
+                                    {exp.date}
+                                  </td>
+                                  <td className="px-3.5 py-2 font-bold text-slate-900">
+                                    {exp.materialName}
+                                  </td>
+                                  <td className="px-3.5 py-2 text-right font-medium">
+                                    {exp.quantity} {exp.unit}
+                                  </td>
+                                  <td className="px-3.5 py-2 text-right font-bold text-blue-700">
+                                    {formatCurrency(exp.totalPrice)} đ
+                                  </td>
+                                  <td className="px-3.5 py-2 text-slate-600">{exp.recipient}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Section 2: Labor Logs for this Project */}
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <Users className="w-4 h-4 text-amber-600" />
+                          <span>Nhật Ký Chấm Công Nhân Công Tại Công Trình ({stats.laborList.length})</span>
+                        </h4>
+                        {onOpenLaborForProject && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = selectedProjectDetail;
+                              setSelectedProjectDetail(null);
+                              onOpenLaborForProject(p);
+                            }}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer shadow-xs"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Chấm Thêm Công</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-52 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px] sticky top-0">
+                            <tr>
+                              <th className="px-3.5 py-2">Ngày</th>
+                              <th className="px-3.5 py-2 text-center">Thứ</th>
+                              <th className="px-3.5 py-2 text-center">Thợ Chính</th>
+                              <th className="px-3.5 py-2 text-center">Thợ Phụ</th>
+                              <th className="px-3.5 py-2 text-center">Tổng Công</th>
+                              <th className="px-3.5 py-2 text-right">Chi Phí</th>
+                              <th className="px-3.5 py-2">Nội Dung</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {stats.laborList.length === 0 ? (
+                              <tr>
+                                <td colSpan={7} className="px-3 py-5 text-center text-slate-400">
+                                  Chưa có nhật ký chấm công nào cho công trình này.
+                                </td>
+                              </tr>
+                            ) : (
+                              stats.laborList.map((log) => (
+                                <tr key={log.id} className="hover:bg-slate-50">
+                                  <td className="px-3.5 py-2 font-mono text-[11px] text-slate-500">
+                                    {log.date}
+                                  </td>
+                                  <td className="px-3.5 py-2 text-center font-medium text-slate-600">
+                                    {log.dayOfWeek}
+                                  </td>
+                                  <td className="px-3.5 py-2 text-center font-medium text-slate-800">
+                                    {log.mainWorkers}
+                                  </td>
+                                  <td className="px-3.5 py-2 text-center font-medium text-slate-800">
+                                    {log.helperWorkers}
+                                  </td>
+                                  <td className="px-3.5 py-2 text-center font-bold text-blue-700">
+                                    {log.totalWorkdays} Công
+                                  </td>
+                                  <td className="px-3.5 py-2 text-right font-bold text-amber-700">
+                                    {formatCurrency(log.totalCost)} đ
+                                  </td>
+                                  <td className="px-3.5 py-2 text-slate-600 max-w-[200px] truncate">
+                                    {log.notes || 'Thi công chống thấm'}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-between shrink-0">
+                    <span className="text-[11px] text-slate-400">
+                      Mã dự án: <strong className="font-mono text-slate-700">{selectedProjectDetail.code}</strong> (ID: {selectedProjectDetail.id})
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProjectDetail(null)}
+                        className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                      >
+                        Đóng
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL: Nhập Tổng Giá Trị Hoàn Thành Nhanh */}
+      {projectToComplete && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 bg-gradient-to-r from-blue-700 to-indigo-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm">Nghiệm Thu Công Trình</h4>
+                  <p className="text-[11px] text-blue-100 truncate max-w-[240px]">
+                    {projectToComplete.name} ({projectToComplete.code})
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setSelectedProjectDetail(null)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                onClick={() => setProjectToComplete(null)}
+                className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 cursor-pointer"
               >
-                Đóng
+                <X className="w-4 h-4" />
               </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Tổng giá trị hoàn thành (VNĐ) <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-blue-600 font-bold text-base">
+                    ₫
+                  </div>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Ví dụ: 125,000,000"
+                    value={
+                      quickCompletedValueInput
+                        ? new Intl.NumberFormat('vi-VN').format(
+                            Number(quickCompletedValueInput.replace(/\D/g, '')) || 0
+                          )
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, '');
+                      setQuickCompletedValueInput(raw);
+                    }}
+                    className="w-full pl-8 pr-4 py-3 rounded-xl border-2 border-blue-500 bg-blue-50/20 font-mono font-extrabold text-blue-900 text-lg focus:ring-4 focus:ring-blue-100 outline-none text-right tracking-wide"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div>
+                <span className="text-[11px] font-semibold text-slate-500 block mb-1.5">
+                  Chọn nhanh giá trị mẫu:
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[20000000, 50000000, 100000000, 200000000, 350000000, 500000000].map(
+                    (preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setQuickCompletedValueInput(String(preset))}
+                        className="px-2 py-1.5 text-[11px] font-semibold rounded-lg border border-slate-200 hover:border-blue-500 hover:bg-blue-50 text-slate-700 hover:text-blue-700 cursor-pointer transition-all text-center"
+                      >
+                        {preset >= 1000000000
+                          ? `${preset / 1000000000} Tỷ`
+                          : `${preset / 1000000} Tr`}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setProjectToComplete(null)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingCompletion}
+                  onClick={handleSaveQuickCompletion}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Xác nhận & Nghiệm thu</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

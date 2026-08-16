@@ -29,6 +29,7 @@ interface DashboardViewProps {
   projects: ConstructionProject[];
   onOpenLaborDetail: () => void;
   onOpenNewExport: () => void;
+  onOpenNewProject?: () => void;
   onSelectProjectFilter?: (projectName: string) => void;
 }
 
@@ -37,6 +38,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   laborLogs,
   onOpenLaborDetail,
   onOpenNewExport,
+  onOpenNewProject,
 }) => {
   // Time range selector
   const [timeRange, setTimeRange] = useState<'7days' | '14days' | '30days' | 'month'>('7days');
@@ -155,13 +157,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
 
-        {/* Right summary pill & Export button */}
-        <div className="flex items-center gap-3">
+        {/* Right summary pill & Action buttons */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          {onOpenNewProject && (
+            <button
+              type="button"
+              id="quick-add-project-btn"
+              onClick={onOpenNewProject}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0c59be] hover:bg-[#094ca7] text-white rounded-xl text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              title="Tạo hồ sơ công trình chống thấm mới"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Thêm công trình mới</span>
+            </button>
+          )}
+
           <button
             type="button"
             id="quick-export-material-btn"
             onClick={onOpenNewExport}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/60 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/60 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+            title="Tạo phiếu xuất vật tư"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Xuất vật tư</span>
@@ -169,7 +185,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div
             id="summary-badge-pill"
-            className="inline-flex items-center px-4 py-1.5 rounded-full bg-[#e8f1fd] text-[#1967d2] text-xs font-semibold tracking-tight shadow-2xs"
+            className="inline-flex items-center px-3.5 py-1.5 rounded-full bg-[#e8f1fd] text-[#1967d2] text-xs font-semibold tracking-tight shadow-2xs"
           >
             <span>{laborLogs.length} nhật ký</span>
             <span className="mx-2 text-blue-300 font-normal">•</span>

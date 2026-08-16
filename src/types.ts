@@ -30,11 +30,20 @@ export interface LoginHistoryRecord {
 
 export interface MaterialItem {
   id: string;
-  name: string;
-  category: string;
-  unit: string;
-  defaultPrice: number;
-  stockQty: number;
+  itemType?: string;      // Loại hàng (Hàng hóa, Dịch vụ, ...)
+  category: string;       // Nhóm hàng (Hai thành phần gốc xi măng, Gốc PU, ...)
+  code: string;           // Mã hàng (SP2511175, SP2511158, vitecxp02 HS, ...)
+  name: string;           // Tên hàng
+  brand?: string;         // Thương hiệu (Chống Thấm 36, Sika, ...)
+  price?: number;         // Giá bán
+  defaultPrice: number;   // Giá bán (backward compatible)
+  costPrice?: number;     // Giá vốn
+  stockQty: number;       // Tồn kho
+  unit: string;           // ĐVT (Bộ, kg, Thùng, Bao, Cuộn, Can, ...)
+  description?: string;   // Mô tả
+  minStock?: number;      // Định mức tồn kho tối thiểu
+  location?: string;      // Vị trí lưu kho
+  updatedAt?: string;
 }
 
 export interface ExportedGood {
@@ -67,15 +76,16 @@ export interface ConstructionProject {
   partner: string;
   address: string;
   startDate: string;
-  endDate?: string;
   status: 'active' | 'completed' | 'pending';
   totalExportsValue: number;
   workdaysLogged: number;
+  completedValue?: number; // Tổng giá trị hoàn thành khi đã nghiệm thu
+  notes?: string;
+  endDate?: string;
   supervisor?: string;
   category?: string;
   phone?: string;
   budget?: number;
-  notes?: string;
 }
 
 export interface StaffMember {
@@ -83,7 +93,7 @@ export interface StaffMember {
   name: string;
   role: string;
   phone: string;
-  exp: string;
+  dailyWage?: number; // Lương ngày (VNĐ/ngày)
   status: string;
 }
 

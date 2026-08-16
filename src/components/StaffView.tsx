@@ -1,16 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Users,
   UserPlus,
   Phone,
   HardHat,
-  Award,
+  Banknote,
   Search,
   Trash2,
+  Edit,
   X,
-  CheckCircle2,
   Database,
   Building2,
+  CheckCircle2,
+  TrendingUp,
+  Briefcase,
 } from 'lucide-react';
 import { StaffMember } from '../types';
 
@@ -26,143 +29,355 @@ export const StaffView: React.FC<StaffViewProps> = ({
   onDeleteStaff,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
 
   // Form states
   const [name, setName] = useState('');
   const [role, setRole] = useState('Thợ chính chống thấm');
   const [phone, setPhone] = useState('');
-  const [exp, setExp] = useState('3 năm');
-  const [status, setStatus] = useState('Đang tại công trình');
+  const [dailyWage, setDailyWage] = useState<number>(450000);
+  const [status, setStatus] = useState('Sẵn sàng nhận dự án mới');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const filtered = staff.filter(
-    (w) =>
-      w.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      w.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      w.phone.includes(searchTerm) ||
-      w.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const formatCurrency = (val?: number) => {
+    if (val === undefined || isNaN(val)) return '0 đ';
+    return new Intl.NumberFormat('vi-VN').format(val) + ' đ';
+  };
+
+  // Open modal for Adding
+  const handleOpenAddModal = () => {
+    setEditingStaff(null);
+    setName('');
+    setRole('Thợ chính chống thấm');
+    setPhone('');
+    setDailyWage(450000);
+    setStatus('Sẵn sàng nhận dự án mới');
+    setIsModalOpen(true);
+  };
+
+  // Open modal for Editing
+  const handleOpenEditModal = (member: StaffMember) => {
+    setEditingStaff(member);
+    setName(member.name);
+    setRole(member.role);
+    setPhone(member.phone);
+    setDailyWage(member.dailyWage || 450000);
+    setStatus(member.status || 'Sẵn sàng nhận dự án mới');
+    setIsModalOpen(true);
+  };
+
+  const filtered = useMemo(() => {
+    return staff.filter((w) => {
+      const matchSearch =
+        w.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        w.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        w.phone.includes(searchTerm) ||
+        w.status.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchRole =
+        roleFilter === 'all'
+          ? true
+          : roleFilter === 'main'
+          ? w.role.toLowerCase().includes('chính') || w.role.toLowerCase().includes('tổ trưởng')
+          : roleFilter === 'supervisor'
+          ? w.role.toLowerCase().includes('kỹ sư') ||
+            w.role.toLowerCase().includes('giám sát') ||
+            w.role.toLowerCase().includes('chỉ huy')
+          : roleFilter === 'helper'
+          ? w.role.toLowerCase().includes('phụ')
+          : true;
+
+      return matchSearch && matchRole;
+    });
+  }, [staff, searchTerm, roleFilter]);
+
+  // Statistics calculation
+  const stats = useMemo(() => {
+    const total = staff.length;
+    const working = staff.filter((s) => !s.status.toLowerCase().includes('sẵn sàng')).length;
+    const ready = total - working;
+    const totalWage = staff.reduce((sum, s) => sum + (s.dailyWage || 0), 0);
+    const avgWage = total > 0 ? Math.round(totalWage / total) : 0;
+
+    return { total, working, ready, avgWage };
+  }, [staff]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !phone.trim()) return;
 
     setIsSubmitting(true);
-    const newStaff: StaffMember = {
-      id: `staff_${Date.now()}`,
+    const staffData: StaffMember = {
+      id: editingStaff ? editingStaff.id : `staff_${Date.now()}`,
       name: name.trim(),
       role: role.trim(),
       phone: phone.trim(),
-      exp: exp.trim() || '1 năm',
-      status: status.trim() || 'Đang tại công trình',
+      dailyWage: Number(dailyWage) || 0,
+      status: status.trim() || 'Sẵn sàng nhận dự án mới',
     };
 
-    await onAddStaff(newStaff);
-    setName('');
-    setPhone('');
+    await onAddStaff(staffData);
     setIsSubmitting(false);
-    setIsAddModalOpen(false);
+    setIsModalOpen(false);
+    setEditingStaff(null);
   };
+
+  const quickWageOptions = [350000, 400000, 450000, 500000, 550000, 650000];
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-10">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+      {/* Header & Quick Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
               Đội Ngũ Nhân Sự & Thợ Thi Công
             </h2>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <Database className="w-3 h-3" />
-              Firebase Firestore ({staff.length})
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <Database className="w-3.5 h-3.5" />
+              Realtime Database ({staff.length})
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Dữ liệu nhân sự, kỹ thuật viên và tổ đội thi công được đồng bộ thời gian thực từ cơ sở dữ liệu
+          <p className="text-xs text-slate-500 mt-1">
+            Quản lý thông tin thợ chính, kỹ sư giám sát và đơn giá lương ngày cho từng nhân sự
           </p>
         </div>
 
         <button
           type="button"
-          onClick={() => setIsAddModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0c59be] hover:bg-[#094ca7] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+          onClick={handleOpenAddModal}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0c59be] hover:bg-[#094ca7] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
         >
           <UserPlus className="w-4 h-4" />
           <span>Thêm nhân sự mới</span>
         </button>
       </div>
 
-      {/* Search & Filter bar */}
-      <div className="relative max-w-md">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Tìm theo tên, vai trò, số điện thoại hoặc công trình..."
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none shadow-2xs"
-        />
+      {/* KPI Overview Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500 font-medium">Tổng nhân sự</span>
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Users className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-xl font-bold text-slate-900 mt-1">{stats.total}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Trong danh sách quản lý</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500 font-medium">Đang tại công trình</span>
+            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <HardHat className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-xl font-bold text-amber-600 mt-1">{stats.working}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Đang trực tiếp thi công</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500 font-medium">Sẵn sàng nhận việc</span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-xl font-bold text-emerald-600 mt-1">{stats.ready}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Chờ phân công dự án</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500 font-medium">Lương ngày trung bình</span>
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Banknote className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-xl font-bold text-indigo-700 mt-1">{formatCurrency(stats.avgWage)}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">/ ngày công chuẩn</p>
+        </div>
+      </div>
+
+      {/* Filter & Search Bar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Tìm theo tên, chức danh, số điện thoại, công trình..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none shadow-2xs"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          <button
+            type="button"
+            onClick={() => setRoleFilter('all')}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              roleFilter === 'all'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Tất cả ({staff.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter('main')}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              roleFilter === 'main'
+                ? 'bg-blue-600 text-white shadow-2xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Thợ chính / Tổ trưởng
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter('supervisor')}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              roleFilter === 'supervisor'
+                ? 'bg-indigo-600 text-white shadow-2xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Kỹ sư / Giám sát
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoleFilter('helper')}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              roleFilter === 'helper'
+                ? 'bg-amber-600 text-white shadow-2xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Thợ phụ
+          </button>
+        </div>
       </div>
 
       {/* Staff Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((w) => (
-          <div
-            key={w.id}
-            className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all space-y-3 relative group"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 font-bold border border-blue-100">
-                  <HardHat className="w-5 h-5" />
+        {filtered.map((w) => {
+          const isReady = w.status.toLowerCase().includes('sẵn sàng');
+          const isSupervisor =
+            w.role.toLowerCase().includes('kỹ sư') ||
+            w.role.toLowerCase().includes('giám sát') ||
+            w.role.toLowerCase().includes('chỉ huy');
+
+          return (
+            <div
+              key={w.id}
+              className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs hover:shadow-md transition-all space-y-3.5 relative group flex flex-col justify-between"
+            >
+              <div className="space-y-3">
+                {/* Header of Card */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 font-bold border ${
+                        isSupervisor
+                          ? 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                          : 'bg-blue-50 text-blue-600 border-blue-100'
+                      }`}
+                    >
+                      {isSupervisor ? (
+                        <Briefcase className="w-5 h-5" />
+                      ) : (
+                        <HardHat className="w-5 h-5" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-slate-900 text-sm tracking-tight truncate">
+                        {w.name}
+                      </h3>
+                      <p className="text-xs text-blue-600 font-medium truncate">{w.role}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(w)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all cursor-pointer"
+                      title="Sửa thông tin"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    {onDeleteStaff && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Xác nhận xóa nhân sự "${w.name}" khỏi cơ sở dữ liệu?`)) {
+                            onDeleteStaff(w.id);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
+                        title="Xóa nhân sự"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-slate-900 text-sm">{w.name}</h3>
-                  <p className="text-xs text-blue-600 font-medium">{w.role}</p>
+
+                {/* Details: Phone & Daily Wage */}
+                <div className="space-y-2 pt-1 border-t border-slate-100 text-xs">
+                  {/* Phone */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-slate-400" />
+                      Điện thoại:
+                    </span>
+                    <a
+                      href={`tel:${w.phone}`}
+                      className="text-slate-800 hover:text-blue-600 font-semibold transition-colors"
+                    >
+                      {w.phone}
+                    </a>
+                  </div>
+
+                  {/* Daily Wage */}
+                  <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                    <span className="text-slate-500 font-medium flex items-center gap-1.5">
+                      <Banknote className="w-4 h-4 text-emerald-600" />
+                      Lương ngày:
+                    </span>
+                    <span className="font-bold text-emerald-700 text-xs">
+                      {formatCurrency(w.dailyWage)}
+                      <span className="text-[10px] font-normal text-slate-400 ml-1">/ ngày</span>
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {onDeleteStaff && (
-                <button
-                  type="button"
-                  onClick={() => onDeleteStaff(w.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
-                  title="Xóa nhân sự"
+              {/* Status / Assignment footer */}
+              <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                <span className="text-slate-400 flex items-center gap-1">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                  Phụ trách:
+                </span>
+                <span
+                  className={`font-semibold px-2.5 py-0.5 rounded-lg border truncate max-w-[190px] ${
+                    isReady
+                      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                      : 'text-amber-700 bg-amber-50 border-amber-200'
+                  }`}
+                  title={w.status}
                 >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            <div className="text-xs text-slate-600 space-y-1.5 pt-1">
-              <div className="flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-slate-400" />
-                <a
-                  href={`tel:${w.phone}`}
-                  className="hover:text-blue-600 transition-colors font-medium"
-                >
-                  {w.phone}
-                </a>
-              </div>
-              <div className="flex items-center gap-2">
-                <Award className="w-3.5 h-3.5 text-slate-400" />
-                <span>Kinh nghiệm: <strong className="text-slate-700">{w.exp}</strong></span>
+                  {w.status}
+                </span>
               </div>
             </div>
-
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 flex items-center gap-1">
-                <Building2 className="w-3 h-3 text-slate-400" />
-                Phụ trách:
-              </span>
-              <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 truncate max-w-[170px]">
-                {w.status}
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         {filtered.length === 0 && (
           <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs space-y-2">
@@ -170,36 +385,48 @@ export const StaffView: React.FC<StaffViewProps> = ({
             <p className="font-semibold text-slate-600 text-sm">
               {searchTerm
                 ? `Không tìm thấy nhân sự phù hợp với từ khóa "${searchTerm}"`
-                : 'Chưa có nhân sự nào trong cơ sở dữ liệu'}
+                : 'Chưa có nhân sự nào trong danh mục'}
             </p>
             <p className="text-slate-400 text-[11px]">
               {searchTerm
-                ? 'Vui lòng kiểm tra lại từ khóa tìm kiếm'
-                : 'Nhấn nút "Thêm nhân sự mới" để thêm thông tin thợ và chỉ huy vào hệ thống'}
+                ? 'Vui lòng kiểm tra lại từ khóa tìm kiếm hoặc bộ lọc chức danh'
+                : 'Nhấn nút "Thêm nhân sự mới" để nhập thông tin thợ và chỉ huy vào hệ thống'}
             </p>
           </div>
         )}
       </div>
 
-      {/* Modal Add Staff */}
-      {isAddModalOpen && (
+      {/* Modal Add / Edit Staff */}
+      {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div className="flex items-center gap-2">
-                <HardHat className="w-5 h-5 text-blue-600" />
-                <h3 className="text-base font-bold text-slate-900">Thêm Nhân Sự Mới</h3>
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <HardHat className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {editingStaff ? 'Cập Nhật Thông Tin Nhân Sự' : 'Thêm Nhân Sự Mới'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {editingStaff
+                      ? `Chỉnh sửa hồ sơ cho ${editingStaff.name}`
+                      : 'Lưu thông tin nhân sự và đơn giá lương ngày vào Realtime Database'}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => setIsModalOpen(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3.5">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Họ và tên */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Họ và tên nhân sự <span className="text-red-500">*</span>
@@ -210,11 +437,12 @@ export const StaffView: React.FC<StaffViewProps> = ({
                   placeholder="Ví dụ: Nguyễn Văn Hùng"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Vị trí & Điện thoại */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Vị trí / Chức danh <span className="text-red-500">*</span>
@@ -222,13 +450,16 @@ export const StaffView: React.FC<StaffViewProps> = ({
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none bg-white"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none bg-white font-medium"
                   >
-                    <option value="Tổ trưởng / Thợ chính">Tổ trưởng / Thợ chính</option>
+                    <option value="Đội Trưởng Thi Công Chống Thấm">Đội Trưởng Thi Công Chống Thấm</option>
                     <option value="Thợ chính chống thấm">Thợ chính chống thấm</option>
+                    <option value="Thợ Chính Khò Màng Bitum">Thợ Chính Khò Màng Bitum</option>
+                    <option value="Tổ Trưởng Phun Polyurethane">Tổ Trưởng Phun Polyurethane</option>
+                    <option value="Kỹ Thuật Viên Xử Lý Rò Rỉ & Nứt">Kỹ Thuật Viên Bơm Keo PU/Epoxy</option>
+                    <option value="Kỹ Sư Giám Sát Hiện Trường">Kỹ Sư Giám Sát Hiện Trường</option>
+                    <option value="Chỉ huy trưởng công trường">Chỉ huy trưởng công trường</option>
                     <option value="Thợ phụ thi công">Thợ phụ thi công</option>
-                    <option value="Kỹ thuật / Giám sát">Kỹ thuật / Giám sát</option>
-                    <option value="Chỉ huy trưởng công trường">Chỉ huy trưởng</option>
                   </select>
                 </div>
 
@@ -242,53 +473,92 @@ export const StaffView: React.FC<StaffViewProps> = ({
                     placeholder="0912 xxx xxx"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none font-medium"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Kinh nghiệm thi công
+              {/* Lương ngày (VNĐ/ngày) */}
+              <div className="bg-emerald-50/50 p-3.5 rounded-xl border border-emerald-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-emerald-900">
+                    Lương ngày (VNĐ/ngày) <span className="text-red-500">*</span>
                   </label>
+                  <span className="text-xs font-extrabold text-emerald-700">
+                    {formatCurrency(dailyWage)} / ngày
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <Banknote className="w-4 h-4 text-emerald-600 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
-                    type="text"
-                    placeholder="Ví dụ: 5 năm"
-                    value={exp}
-                    onChange={(e) => setExp(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none"
+                    type="number"
+                    required
+                    step="10000"
+                    min="0"
+                    placeholder="Ví dụ: 450000"
+                    value={dailyWage || ''}
+                    onChange={(e) => setDailyWage(Number(e.target.value) || 0)}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-emerald-200 bg-white text-xs font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 outline-none"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Công trình phân công
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: Đang tại Xd Đoàn Ái Sơn"
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none"
-                  />
+                {/* Quick Selection Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="text-[10px] text-slate-500 font-medium py-0.5">Chọn nhanh:</span>
+                  {quickWageOptions.map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setDailyWage(opt)}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all cursor-pointer ${
+                        dailyWage === opt
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {new Intl.NumberFormat('vi-VN').format(opt)} đ
+                    </button>
+                  ))}
                 </div>
               </div>
 
+              {/* Công trình phân công / Trạng thái */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Công trình phân công / Trạng thái
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ví dụ: Đang tại Vincom Mega Mall hoặc Sẵn sàng nhận dự án mới"
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none"
+                />
+              </div>
+
+              {/* Buttons */}
               <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 bg-[#0c59be] hover:bg-[#094ca7] text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2.5 bg-[#0c59be] hover:bg-[#094ca7] text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-all flex items-center gap-1.5"
                 >
-                  {isSubmitting ? 'Đang lưu vào Firebase...' : 'Lưu nhân sự'}
+                  {isSubmitting ? (
+                    'Đang lưu...'
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{editingStaff ? 'Lưu thay đổi' : 'Lưu nhân sự'}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

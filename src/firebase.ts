@@ -366,21 +366,30 @@ export function subscribeStaff(onData: (staff: StaffMember[]) => void): Unsubscr
   );
 }
 
+// Helper to clean data before writing to Firebase RTDB (removes undefined values)
+function cleanForDatabase<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data));
+}
+
 // Data Mutation Functions
 export async function addProjectToDatabase(project: ConstructionProject) {
   try {
-    await set(ref(db, `projects/${project.id}`), project);
+    const cleanPayload = cleanForDatabase(project);
+    await set(ref(db, `projects/${project.id}`), cleanPayload);
   } catch (err) {
     handleDatabaseError(err, OperationType.CREATE, `projects/${project.id}`);
+    throw err;
   }
 }
 export const addProjectToFirestore = addProjectToDatabase;
 
 export async function updateProjectInDatabase(project: ConstructionProject) {
   try {
-    await update(ref(db, `projects/${project.id}`), project as any);
+    const cleanPayload = cleanForDatabase(project);
+    await set(ref(db, `projects/${project.id}`), cleanPayload);
   } catch (err) {
     handleDatabaseError(err, OperationType.UPDATE, `projects/${project.id}`);
+    throw err;
   }
 }
 export const updateProjectInFirestore = updateProjectInDatabase;
@@ -390,33 +399,64 @@ export async function deleteProjectFromDatabase(projectId: string) {
     await remove(ref(db, `projects/${projectId}`));
   } catch (err) {
     handleDatabaseError(err, OperationType.DELETE, `projects/${projectId}`);
+    throw err;
   }
 }
 export const deleteProjectFromFirestore = deleteProjectFromDatabase;
 
 export async function addMaterialToDatabase(material: MaterialItem) {
   try {
-    await set(ref(db, `materials/${material.id}`), material);
+    const cleanPayload = cleanForDatabase(material);
+    await set(ref(db, `materials/${material.id}`), cleanPayload);
   } catch (err) {
     handleDatabaseError(err, OperationType.CREATE, `materials/${material.id}`);
+    throw err;
   }
 }
 export const addMaterialToFirestore = addMaterialToDatabase;
+
+export async function updateMaterialInDatabase(material: MaterialItem) {
+  try {
+    const cleanPayload = cleanForDatabase(material);
+    await set(ref(db, `materials/${material.id}`), cleanPayload);
+  } catch (err) {
+    handleDatabaseError(err, OperationType.UPDATE, `materials/${material.id}`);
+    throw err;
+  }
+}
+export const updateMaterialInFirestore = updateMaterialInDatabase;
+
+export async function batchSaveMaterialsToDatabase(materialsList: MaterialItem[]) {
+  try {
+    const updates: Record<string, MaterialItem> = {};
+    for (const mat of materialsList) {
+      updates[`materials/${mat.id}`] = cleanForDatabase(mat);
+    }
+    await update(ref(db), updates);
+  } catch (err) {
+    handleDatabaseError(err, OperationType.WRITE, 'materials');
+    throw err;
+  }
+}
+export const batchSaveMaterialsToFirestore = batchSaveMaterialsToDatabase;
 
 export async function deleteMaterialFromDatabase(materialId: string) {
   try {
     await remove(ref(db, `materials/${materialId}`));
   } catch (err) {
     handleDatabaseError(err, OperationType.DELETE, `materials/${materialId}`);
+    throw err;
   }
 }
 export const deleteMaterialFromFirestore = deleteMaterialFromDatabase;
 
 export async function addExportedGoodToDatabase(good: ExportedGood) {
   try {
-    await set(ref(db, `exportedGoods/${good.id}`), good);
+    const cleanPayload = cleanForDatabase(good);
+    await set(ref(db, `exportedGoods/${good.id}`), cleanPayload);
   } catch (err) {
     handleDatabaseError(err, OperationType.CREATE, `exportedGoods/${good.id}`);
+    throw err;
   }
 }
 export const addExportedGoodToFirestore = addExportedGoodToDatabase;
@@ -424,18 +464,22 @@ export const addExportedGoodToFirestore = addExportedGoodToDatabase;
 export async function addLaborLogToDatabase(log: LaborDailyLog) {
   try {
     const id = `log_${Date.now()}`;
-    await set(ref(db, `laborLogs/${id}`), log);
+    const cleanPayload = cleanForDatabase(log);
+    await set(ref(db, `laborLogs/${id}`), cleanPayload);
   } catch (err) {
     handleDatabaseError(err, OperationType.CREATE, 'laborLogs');
+    throw err;
   }
 }
 export const addLaborLogToFirestore = addLaborLogToDatabase;
 
 export async function addStaffToDatabase(staff: StaffMember) {
   try {
-    await set(ref(db, `staff/${staff.id}`), staff);
+    const cleanPayload = cleanForDatabase(staff);
+    await set(ref(db, `staff/${staff.id}`), cleanPayload);
   } catch (err) {
     handleDatabaseError(err, OperationType.CREATE, `staff/${staff.id}`);
+    throw err;
   }
 }
 export const addStaffToFirestore = addStaffToDatabase;
@@ -445,6 +489,7 @@ export async function deleteStaffFromDatabase(staffId: string) {
     await remove(ref(db, `staff/${staffId}`));
   } catch (err) {
     handleDatabaseError(err, OperationType.DELETE, `staff/${staffId}`);
+    throw err;
   }
 }
 export const deleteStaffFromFirestore = deleteStaffFromDatabase;

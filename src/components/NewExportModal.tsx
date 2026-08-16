@@ -9,6 +9,7 @@ interface NewExportModalProps {
   materials: MaterialItem[];
   onAddExport: (item: ExportedGood) => void;
   initialProjectName?: string;
+  initialMaterialId?: string;
 }
 
 export const NewExportModal: React.FC<NewExportModalProps> = ({
@@ -18,13 +19,18 @@ export const NewExportModal: React.FC<NewExportModalProps> = ({
   materials,
   onAddExport,
   initialProjectName,
+  initialMaterialId,
 }) => {
-  const [selectedMaterialId, setSelectedMaterialId] = useState(materials[0]?.id || '');
-  const [selectedProjectName, setSelectedProjectName] = useState(initialProjectName || projects[0]?.name || '');
+  const [selectedMaterialId, setSelectedMaterialId] = useState(
+    initialMaterialId || materials[0]?.id || ''
+  );
+  const [selectedProjectName, setSelectedProjectName] = useState(
+    initialProjectName || projects[0]?.name || ''
+  );
   const [quantity, setQuantity] = useState<number>(1);
   const [recipient, setRecipient] = useState('Chỉ huy công trường');
   const [unitPrice, setUnitPrice] = useState<number>(
-    materials[0]?.defaultPrice || 720000
+    materials[0]?.price || materials[0]?.defaultPrice || 720000
   );
 
   React.useEffect(() => {
@@ -35,13 +41,26 @@ export const NewExportModal: React.FC<NewExportModalProps> = ({
     }
   }, [initialProjectName, isOpen, projects]);
 
+  React.useEffect(() => {
+    if (initialMaterialId) {
+      setSelectedMaterialId(initialMaterialId);
+      const found = materials.find((m) => m.id === initialMaterialId);
+      if (found) {
+        setUnitPrice(found.price || found.defaultPrice || 0);
+      }
+    } else if (materials.length > 0 && !selectedMaterialId) {
+      setSelectedMaterialId(materials[0].id);
+      setUnitPrice(materials[0].price || materials[0].defaultPrice || 0);
+    }
+  }, [initialMaterialId, isOpen, materials]);
+
   if (!isOpen) return null;
 
   const handleMaterialChange = (matId: string) => {
     setSelectedMaterialId(matId);
     const found = materials.find((m) => m.id === matId);
     if (found) {
-      setUnitPrice(found.defaultPrice);
+      setUnitPrice(found.price || found.defaultPrice || 0);
     }
   };
 
@@ -101,7 +120,7 @@ export const NewExportModal: React.FC<NewExportModalProps> = ({
             >
               {materials.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name} (Tồn kho: {m.stockQty} {m.unit})
+                  {m.code ? `[${m.code}] ` : ''}{m.name} — {m.brand || 'Chống Thấm 36'} (Tồn: {m.stockQty} {m.unit})
                 </option>
               ))}
             </select>
