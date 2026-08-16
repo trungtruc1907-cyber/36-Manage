@@ -1,3 +1,22 @@
+export interface TenantOrganization {
+  id: string;
+  code: string;
+  name: string;
+  brandName: string;
+  tagline?: string;
+  phone: string;
+  email: string;
+  address: string;
+  taxCode: string;
+  customLogoUrl?: string | null;
+  status: 'active' | 'inactive' | 'archived';
+  isDefault?: boolean;
+  createdBy?: string;
+  ownerUsername?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface UserAccount {
   username: string;
   role: 'admin' | 'supervisor' | 'storekeeper';
@@ -6,6 +25,9 @@ export interface UserAccount {
   name: string;
   phone?: string;
   email?: string;
+  allowedTenants?: string[];
+  isTenantOwner?: boolean;
+  createdTenantId?: string;
 }
 
 export interface UserAccountRecord extends UserAccount {
@@ -20,6 +42,8 @@ export interface LoginHistoryRecord {
   name: string;
   role: string;
   orgId: string;
+  tenantId?: string;
+  tenantName?: string;
   timestamp: number;
   timeFormatted: string;
   status: 'success' | 'failed';
@@ -30,6 +54,7 @@ export interface LoginHistoryRecord {
 
 export interface MaterialItem {
   id: string;
+  tenantId?: string;
   itemType?: string;      // Loại hàng (Hàng hóa, Dịch vụ, ...)
   category: string;       // Nhóm hàng (Hai thành phần gốc xi măng, Gốc PU, ...)
   code: string;           // Mã hàng (SP2511175, SP2511158, vitecxp02 HS, ...)
@@ -48,17 +73,32 @@ export interface MaterialItem {
 
 export interface ExportedGood {
   id: string;
+  tenantId?: string;
   materialName: string;
+  materialCode?: string;
   projectName: string;
   projectCode: string;
   quantity: number;
   unit: string;
+  unitPrice?: number;
   totalPrice: number;
   date: string;
   recipient: string;
+  exportedBy?: string;
+  notes?: string;
+}
+
+export interface LaborWorkerDetail {
+  name: string;
+  role: string;
+  dailyWage: number;
+  workdays: number;
+  cost: number;
 }
 
 export interface LaborDailyLog {
+  id?: string;
+  tenantId?: string;
   date: string;
   dayOfWeek: string;
   mainWorkers: number;
@@ -67,10 +107,15 @@ export interface LaborDailyLog {
   totalCost: number;
   notes: string;
   projectName?: string;
+  projectCode?: string;
+  session?: 'morning' | 'afternoon' | 'full';
+  workerNames?: string[];
+  workerDetails?: LaborWorkerDetail[];
 }
 
 export interface ConstructionProject {
   id: string;
+  tenantId?: string;
   code: string;
   name: string;
   partner: string;
@@ -90,6 +135,7 @@ export interface ConstructionProject {
 
 export interface StaffMember {
   id: string;
+  tenantId?: string;
   name: string;
   role: string;
   phone: string;
@@ -107,4 +153,22 @@ export interface CompanySettings {
   address: string;
   taxCode: string;
   customLogoUrl: string | null;
+  tenantId?: string;
+}
+
+export type ActivityCategory = 'all' | 'project' | 'export' | 'labor' | 'material' | 'staff' | 'auth' | 'settings' | 'tenant';
+
+export interface ActivityLog {
+  id: string;
+  tenantId?: string;
+  tenantName?: string;
+  category: 'project' | 'export' | 'labor' | 'material' | 'staff' | 'auth' | 'settings' | 'tenant';
+  action: string;
+  title: string;
+  description: string;
+  userName: string;
+  userRole?: string;
+  timestamp: number;
+  timeFormatted: string;
+  status?: 'success' | 'warning' | 'info';
 }

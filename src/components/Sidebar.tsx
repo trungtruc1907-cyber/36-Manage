@@ -10,9 +10,12 @@ import {
   LogOut,
   X,
   Menu,
+  Building2,
+  ChevronDown,
+  Layers,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
-import { CompanySettings, UserAccount } from '../types';
+import { CompanySettings, TenantOrganization, UserAccount } from '../types';
 
 export type NavTab = 'dashboard' | 'projects' | 'materials' | 'staff' | 'settings';
 
@@ -26,6 +29,9 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   onOpenSupportModal: () => void;
+  tenants?: TenantOrganization[];
+  activeTenantId?: string;
+  onOpenTenantManager?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -38,6 +44,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
   onOpenSupportModal,
+  tenants = [],
+  activeTenantId,
+  onOpenTenantManager,
 }) => {
   const menuItems: { id: NavTab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Tổng quan', icon: <LayoutGrid className="w-5 h-5" /> },
@@ -46,6 +55,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'staff', label: 'Nhân sự', icon: <Users className="w-5 h-5" /> },
     { id: 'settings', label: 'Thiết lập', icon: <Settings className="w-5 h-5" /> },
   ];
+
+  const currentTenant = tenants.find((t) => t.id === activeTenantId) || tenants[0];
 
   return (
     <>
@@ -66,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         {/* Top Branding */}
         <div>
-          <div className="p-4 pb-5 border-b border-slate-100 flex items-center justify-between">
+          <div className="p-4 pb-4 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <div className="p-1 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs flex items-center justify-center flex-shrink-0">
                 <BrandLogo
@@ -97,18 +108,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
-          {/* Org badge if logged in */}
-          {currentUser && (
-            <div className="px-4 pt-3 pb-1">
-              <div className="px-3 py-1.5 rounded-lg bg-blue-50/70 border border-blue-100/60 text-[11px] flex items-center justify-between text-slate-600">
-                <span className="font-semibold text-blue-700">{companySettings?.orgId || currentUser.orgId}</span>
-                <span className="truncate ml-2 text-slate-500 font-medium">{companySettings?.orgName || currentUser.orgName}</span>
+          {/* Multi-Tenant Workspace Selector */}
+          <div className="px-3 pt-3 pb-1">
+            <button
+              type="button"
+              id="sidebar-tenant-switcher-btn"
+              onClick={() => {
+                if (onOpenTenantManager) onOpenTenantManager();
+              }}
+              className="w-full p-2.5 rounded-xl bg-slate-50 hover:bg-blue-50/80 border border-slate-200/90 hover:border-blue-300 text-left transition-all group/tenant cursor-pointer"
+              title="Nhấn để chuyển đổi hoặc quản lý Chi nhánh / Doanh nghiệp (Multi-Tenant)"
+            >
+              <div className="flex items-center justify-between gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                <span className="flex items-center gap-1 text-blue-700">
+                  <Building2 className="w-3 h-3 text-blue-600" />
+                  <span>Chi Nhánh / Đơn Vị</span>
+                </span>
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 font-mono">
+                  {currentTenant?.code || companySettings?.orgId || 'CT36'}
+                </span>
               </div>
-            </div>
-          )}
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-xs font-bold text-slate-900 truncate group-hover/tenant:text-blue-700 transition-colors">
+                  {currentTenant?.name || companySettings?.orgName || 'Công Ty Trường Sơn 36'}
+                </p>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover/tenant:text-blue-600 flex-shrink-0" />
+              </div>
+            </button>
+          </div>
 
           {/* Navigation Links */}
-          <nav className="p-3 space-y-1 mt-2">
+          <nav className="p-3 space-y-1 mt-1">
             {menuItems.map((item) => {
               const isActive = activeTab === item.id;
               return (

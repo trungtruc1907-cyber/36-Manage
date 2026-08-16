@@ -34,7 +34,7 @@ import {
   Edit2,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
-import { CompanySettings, UserAccount, UserAccountRecord, LoginHistoryRecord } from '../types';
+import { CompanySettings, TenantOrganization, UserAccount, UserAccountRecord, LoginHistoryRecord } from '../types';
 import { DEFAULT_COMPANY_SETTINGS } from '../data/mockData';
 import { INITIAL_USER_ACCOUNTS } from '../firebase';
 
@@ -49,6 +49,10 @@ interface SettingsViewProps {
   onDeleteAccount?: (username: string) => Promise<void> | void;
   onClearAllData?: () => Promise<void> | void;
   onSeedSampleData?: () => Promise<void> | void;
+  tenants?: TenantOrganization[];
+  activeTenantId?: string;
+  onSelectTenant?: (tenantId: string) => void;
+  onOpenTenantManager?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -62,6 +66,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onDeleteAccount,
   onClearAllData,
   onSeedSampleData,
+  tenants = [],
+  activeTenantId,
+  onSelectTenant,
+  onOpenTenantManager,
 }) => {
   // Form states
   const [formData, setFormData] = useState<CompanySettings>(companySettings);
@@ -70,6 +78,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Admin permission check
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.username?.toLowerCase() === 'admin';
 
   // Password Change state for active user
   const [newPassword, setNewPassword] = useState('');
@@ -86,14 +97,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [addRole, setAddRole] = useState<'admin' | 'storekeeper' | 'supervisor'>('supervisor');
   const [addOrgId, setAddOrgId] = useState(companySettings?.orgId || 'CT36');
   const [addPhone, setAddPhone] = useState('');
+  const [addEmail, setAddEmail] = useState('');
+  const [addAllowedTenants, setAddAllowedTenants] = useState<string[]>([]);
   const [addUserError, setAddUserError] = useState('');
   const [isSavingUser, setIsSavingUser] = useState(false);
 
-  // Edit Account Password / Role Modal
+  // Edit Account Modal & State
   const [editingAccount, setEditingAccount] = useState<UserAccountRecord | null>(null);
-  const [editPassValue, setEditPassValue] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [editRoleValue, setEditRoleValue] = useState<'admin' | 'storekeeper' | 'supervisor'>('supervisor');
+  const [editOrgId, setEditOrgId] = useState('CT36');
+  const [editOrgName, setEditOrgName] = useState('');
+  const [editPassValue, setEditPassValue] = useState('');
+  const [editShowPass, setEditShowPass] = useState(false);
+  const [editAllowedTenants, setEditAllowedTenants] = useState<string[]>([]);
+  const [editUserError, setEditUserError] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Delete Account Modal & State
+  const [deletingAccount, setDeletingAccount] = useState<UserAccountRecord | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+
+  // Account Search & Filter State
+  const [searchAccountQuery, setSearchAccountQuery] = useState('');
+  const [filterAccountRole, setFilterAccountRole] = useState<'all' | 'admin' | 'storekeeper' | 'supervisor'>('all');
 
   // Login History Search & Filter states
   const [searchLoginQuery, setSearchLoginQuery] = useState('');
@@ -149,6 +178,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setPasswordMsg({ text: 'Đã cập nhật mật khẩu mới thành công lên Realtime Database!', isError: false });
   };
 
+  // Handle Open Create Account Modal
+  const handleOpenCreateAccount = () => {
+    setAddUserError('');
+    setAddName('');
+    setAddUsername('');
+    setAddPassword('123456');
+    setAddRole('supervisor');
+    setAddOrgId(companySettings?.orgId || 'CT36');
+    setAddPhone('');
+    setAddEmail('');
+    setAddAllowedTenants(activeTenantId ? [activeTenantId] : ['tenant_ct36']);
+    setIsAddUserOpen(true);
+  };
+
   // Handle Create Account Submit
   const handleCreateAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,14 +222,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
 
     setIsSavingUser(true);
+    const targetTenant = tenants.find((t) => t.code?.toUpperCase() === cleanOrg || t.id === addAllowedTenants[0]);
+    const orgName = targetTenant?.name || companySettings?.orgName || `Đơn vị ${cleanOrg}`;
+
     const newAcc: UserAccountRecord = {
       username: cleanUsername,
       password: cleanPass,
       name: cleanName,
       role: addRole,
       orgId: cleanOrg,
-      orgName: companySettings?.orgName || `Đơn vị ${cleanOrg}`,
+      orgName,
       phone: addPhone.trim() || undefined,
+      email: addEmail.trim() || undefined,
+      allowedTenants: addAllowedTenants.length > 0 ? addAllowedTenants : undefined,
       createdAt: new Date().toLocaleDateString('vi-VN'),
     };
 
@@ -200,26 +248,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setAddUsername('');
     setAddPassword('123456');
     setAddPhone('');
+    setAddEmail('');
+  };
+
+  // Handle Open Edit Account Modal
+  const handleOpenEditAccount = (acc: UserAccountRecord) => {
+    setEditingAccount(acc);
+    setEditName(acc.name || '');
+    setEditPhone(acc.phone || '');
+    setEditEmail(acc.email || '');
+    setEditRoleValue(acc.role || 'supervisor');
+    setEditOrgId(acc.orgId || 'CT36');
+    setEditOrgName(acc.orgName || '');
+    setEditPassValue('');
+    setEditShowPass(false);
+    setEditAllowedTenants(acc.allowedTenants || (acc.createdTenantId ? [acc.createdTenantId] : ['tenant_ct36']));
+    setEditUserError('');
   };
 
   // Handle Edit Account Save
   const handleSaveEditAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAccount) return;
+    setEditUserError('');
 
-    setIsSavingEdit(true);
-    const updated: UserAccountRecord = {
-      ...editingAccount,
-      role: editRoleValue,
-      password: editPassValue.trim() ? editPassValue.trim() : editingAccount.password,
-    };
-
-    if (onSaveAccount) {
-      await onSaveAccount(updated);
+    const cleanName = editName.trim();
+    if (!cleanName) {
+      setEditUserError('Họ và tên nhân sự không được để trống');
+      return;
     }
 
-    setIsSavingEdit(false);
-    setEditingAccount(null);
+    setIsSavingEdit(true);
+    try {
+      const cleanOrg = editOrgId.trim().toUpperCase() || 'CT36';
+      const targetTenant = tenants.find((t) => t.code?.toUpperCase() === cleanOrg || t.id === editAllowedTenants[0]);
+      const orgName = editOrgName.trim() || targetTenant?.name || editingAccount.orgName || `Đơn vị ${cleanOrg}`;
+
+      const updated: UserAccountRecord = {
+        ...editingAccount,
+        name: cleanName,
+        phone: editPhone.trim() || undefined,
+        email: editEmail.trim() || undefined,
+        role: editRoleValue,
+        orgId: cleanOrg,
+        orgName,
+        allowedTenants: editAllowedTenants.length > 0 ? editAllowedTenants : undefined,
+        password: editPassValue.trim() ? editPassValue.trim() : editingAccount.password,
+      };
+
+      if (onSaveAccount) {
+        await onSaveAccount(updated);
+      }
+
+      setIsSavingEdit(false);
+      setEditingAccount(null);
+    } catch (err) {
+      console.error('Error saving user account:', err);
+      setIsSavingEdit(false);
+      setEditUserError('Đã có lỗi xảy ra khi lưu thông tin tài khoản.');
+    }
+  };
+
+  // Handle Open Delete Account Modal
+  const handleOpenDeleteAccount = (acc: UserAccountRecord) => {
+    setDeletingAccount(acc);
+  };
+
+  // Handle Confirm Delete Account
+  const handleConfirmDeleteAccount = async () => {
+    if (!deletingAccount || !onDeleteAccount) return;
+    setIsDeletingUser(true);
+    try {
+      await onDeleteAccount(deletingAccount.username);
+      setIsDeletingUser(false);
+      setDeletingAccount(null);
+    } catch (err) {
+      console.error('Error deleting user account:', err);
+      setIsDeletingUser(false);
+    }
   };
 
   // Handle Clear Logs
@@ -382,6 +488,71 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <span>Đã lưu cài đặt doanh nghiệp thành công!</span>
           </div>
         )}
+      </div>
+
+      {/* MULTI-TENANT WORKSPACE CARD */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 text-white rounded-2xl p-6 shadow-md border border-slate-700/80 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shadow-inner flex-shrink-0">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-300 font-mono bg-blue-500/20 px-2 py-0.5 rounded">
+                  Multi-Tenant Database
+                </span>
+                <span className="text-xs text-slate-300">
+                  {tenants.length} Đơn vị trực thuộc
+                </span>
+              </div>
+              <h3 className="text-base font-bold text-white mt-1">
+                Không Gian Làm Việc: {tenants.find((t) => t.id === activeTenantId)?.name || companySettings.orgName} ({tenants.find((t) => t.id === activeTenantId)?.code || companySettings.orgId})
+              </h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Toàn bộ dữ liệu Dự án, Kho vật tư, Chấm công và Lịch sử hoạt động được cô lập và đồng bộ độc lập cho từng chi nhánh
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              id="settings-open-tenant-manager-btn"
+              onClick={onOpenTenantManager}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+            >
+              <Building2 className="w-4 h-4" />
+              <span>Quản Lý Chi Nhánh / Đơn Vị</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Branch Switcher Chips */}
+        <div className="pt-3 border-t border-slate-700/60 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-400 font-medium mr-1">Chuyển nhanh không gian:</span>
+          {tenants.map((t) => {
+            const isCurrent = t.id === activeTenantId;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  if (onSelectTenant) onSelectTenant(t.id);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isCurrent
+                    ? 'bg-blue-500 text-white shadow-xs ring-2 ring-blue-300/40'
+                    : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
+                }`}
+              >
+                <span className="font-mono text-[10px] bg-black/30 px-1 py-0.2 rounded font-bold">{t.code}</span>
+                <span className="truncate max-w-[160px]">{t.brandName || t.name}</span>
+                {isCurrent && <Check className="w-3.5 h-3.5 text-blue-200" />}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -843,17 +1014,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <span>Quản Lý Tài Khoản Hệ Thống ({accounts.length})</span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  Tài khoản được lưu đồng bộ thời gian thực trên Firebase Realtime Database
+                  {isAdmin
+                    ? '👑 Bạn đang đăng nhập với quyền Admin: Có toàn quyền Sửa thông tin, phân quyền và Xóa các tài khoản người dùng khác.'
+                    : 'Tài khoản được lưu đồng bộ thời gian thực trên Firebase Realtime Database'}
                 </p>
               </div>
 
-              {onSaveAccount && (
+              {isAdmin && onSaveAccount && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setAddUserError('');
-                    setIsAddUserOpen(true);
-                  }}
+                  id="add-new-user-account-btn"
+                  onClick={handleOpenCreateAccount}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
@@ -862,83 +1033,216 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {accounts.map((acc) => (
-                <div
-                  key={acc.username}
-                  className="p-3.5 bg-slate-50/90 rounded-xl border border-slate-200/90 text-xs flex flex-col justify-between hover:border-slate-300 transition-all shadow-2xs"
+            {/* Account Search & Filter Bar */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchAccountQuery}
+                  onChange={(e) => setSearchAccountQuery(e.target.value)}
+                  placeholder="Tìm theo tên, username, SĐT, email hoặc đơn vị..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-600"
+                />
+                {searchAccountQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchAccountQuery('')}
+                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs">
+                <button
+                  type="button"
+                  onClick={() => setFilterAccountRole('all')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    filterAccountRole === 'all'
+                      ? 'bg-white text-slate-800 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
                 >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-bold text-slate-900 truncate text-sm">{acc.name}</span>
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                          acc.role === 'admin'
-                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                            : acc.role === 'storekeeper'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : 'bg-blue-100 text-blue-800 border border-blue-200'
-                        }`}
-                      >
-                        {acc.role === 'admin'
-                          ? '👑 Admin'
-                          : acc.role === 'storekeeper'
-                          ? '📦 Thủ Kho'
-                          : '👷 Giám Sát'}
-                      </span>
-                    </div>
+                  Tất cả ({accounts.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterAccountRole('admin')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    filterAccountRole === 'admin'
+                      ? 'bg-white text-amber-700 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  👑 Admin ({accounts.filter((a) => a.role === 'admin').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterAccountRole('storekeeper')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    filterAccountRole === 'storekeeper'
+                      ? 'bg-white text-emerald-700 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  📦 Thủ Kho ({accounts.filter((a) => a.role === 'storekeeper').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterAccountRole('supervisor')}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                    filterAccountRole === 'supervisor'
+                      ? 'bg-white text-blue-700 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  👷 Giám Sát ({accounts.filter((a) => a.role === 'supervisor').length})
+                </button>
+              </div>
+            </div>
 
-                    <div className="space-y-0.5 text-slate-600">
-                      <div className="text-[11px] font-mono">
-                        User: <strong className="text-blue-700 font-bold">{acc.username}</strong>
+            {/* Accounts Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {accounts
+                .filter((acc) => {
+                  const matchSearch =
+                    !searchAccountQuery ||
+                    acc.name?.toLowerCase().includes(searchAccountQuery.toLowerCase()) ||
+                    acc.username?.toLowerCase().includes(searchAccountQuery.toLowerCase()) ||
+                    (acc.phone && acc.phone.includes(searchAccountQuery)) ||
+                    (acc.email && acc.email.toLowerCase().includes(searchAccountQuery.toLowerCase())) ||
+                    (acc.orgId && acc.orgId.toLowerCase().includes(searchAccountQuery.toLowerCase())) ||
+                    (acc.orgName && acc.orgName.toLowerCase().includes(searchAccountQuery.toLowerCase()));
+
+                  const matchRole = filterAccountRole === 'all' || acc.role === filterAccountRole;
+                  return matchSearch && matchRole;
+                })
+                .map((acc) => {
+                  const isCurrentLoggedUser =
+                    acc.username.toLowerCase() === (currentUser?.username || '').toLowerCase();
+
+                  return (
+                    <div
+                      key={acc.username}
+                      className={`p-3.5 bg-slate-50/90 rounded-xl border text-xs flex flex-col justify-between hover:border-slate-300 transition-all shadow-2xs ${
+                        isCurrentLoggedUser
+                          ? 'border-blue-300 bg-blue-50/30 ring-1 ring-blue-100'
+                          : 'border-slate-200/90'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 ${
+                                acc.role === 'admin'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : acc.role === 'storekeeper'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {acc.name ? acc.name.charAt(0).toUpperCase() : 'U'}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="font-bold text-slate-900 truncate text-xs block" title={acc.name}>
+                                {acc.name}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">@{acc.username}</span>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex-shrink-0 ${
+                              acc.role === 'admin'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : acc.role === 'storekeeper'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : 'bg-blue-100 text-blue-800 border border-blue-200'
+                            }`}
+                          >
+                            {acc.role === 'admin'
+                              ? '👑 Admin'
+                              : acc.role === 'storekeeper'
+                              ? '📦 Thủ Kho'
+                              : '👷 Giám Sát'}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1 text-slate-600 bg-white/70 p-2 rounded-lg border border-slate-100">
+                          {acc.phone && (
+                            <div className="text-[11px] text-slate-600 flex items-center gap-1.5">
+                              <Phone className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                              <span className="font-medium text-slate-700">{acc.phone}</span>
+                            </div>
+                          )}
+                          {acc.email && (
+                            <div className="text-[11px] text-slate-600 flex items-center gap-1.5 truncate">
+                              <Mail className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                              <span className="text-slate-600 truncate">{acc.email}</span>
+                            </div>
+                          )}
+                          <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5">
+                            <span>Đơn vị: <strong className="text-slate-700">{acc.orgId || 'CT36'}</strong></span>
+                            {acc.createdAt && (
+                              <span className="text-slate-400">Tạo: {acc.createdAt}</span>
+                            )}
+                          </div>
+                          {acc.lastLoginAt && (
+                            <div className="text-[10px] text-slate-500 pt-0.5 border-t border-slate-100">
+                              Đăng nhập: <span className="font-medium text-slate-600">{acc.lastLoginAt}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      {acc.phone && (
-                        <div className="text-[11px] text-slate-500">
-                          SĐT: <span className="font-medium text-slate-700">{acc.phone}</span>
-                        </div>
-                      )}
-                      {acc.lastLoginAt && (
-                        <div className="text-[10px] text-slate-500">
-                          Đăng nhập gần nhất: <span className="font-medium text-slate-600">{acc.lastLoginAt}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
 
-                  <div className="mt-3 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400 font-medium">Org: {acc.orgId || 'CT36'}</span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingAccount(acc);
-                          setEditRoleValue(acc.role);
-                          setEditPassValue('');
-                        }}
-                        className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
-                        title="Đổi mật khẩu / phân quyền"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="mt-3 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
+                        {isCurrentLoggedUser ? (
+                          <span className="text-[10px] font-semibold text-blue-600 bg-blue-100/80 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <UserCheck className="w-3 h-3" />
+                            <span>Bạn đang đăng nhập</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">
+                            {acc.allowedTenants && acc.allowedTenants.length > 1
+                              ? `Truy cập: ${acc.allowedTenants.length} chi nhánh`
+                              : `Chi nhánh: ${acc.orgId || 'CT36'}`}
+                          </span>
+                        )}
 
-                      {onDeleteAccount && acc.username !== 'admin' && acc.username !== currentUser?.username && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (window.confirm(`Xác nhận xóa tài khoản "${acc.name}" (${acc.username}) khỏi cơ sở dữ liệu?`)) {
-                              onDeleteAccount(acc.username);
-                            }
-                          }}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                          title="Xóa tài khoản"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                        <div className="flex items-center gap-1">
+                          {/* Nút Sửa: Admin có quyền sửa tất cả user */}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditAccount(acc)}
+                              className="px-2 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                              title={`Sửa thông tin, mật khẩu & quyền tài khoản ${acc.username}`}
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              <span>Sửa</span>
+                            </button>
+                          )}
+
+                          {/* Nút Xóa: Admin có quyền xóa tất cả các user khác (ngoại trừ tài khoản đang đăng nhập) */}
+                          {isAdmin && onDeleteAccount && !isCurrentLoggedUser && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDeleteAccount(acc)}
+                              className="px-2 py-1 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                              title={`Xóa vĩnh viễn tài khoản ${acc.username}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Xóa</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  );
+                })}
             </div>
           </div>
 
@@ -1251,15 +1555,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         )}
 
-        {/* Modal: Edit Account Role / Password */}
+        {/* Modal: Edit Account (Full Information, Role, Password, Tenants) */}
         {editingAccount && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl border border-slate-100 space-y-4 my-8">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                  <Edit2 className="w-4 h-4 text-blue-600" />
-                  <span>Cập Nhật Tài Khoản: {editingAccount.name}</span>
-                </h3>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+                    <Edit2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">
+                      Chỉnh Sửa Tài Khoản Nhân Sự
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Cập nhật thông tin, mật khẩu & quyền truy cập cho <strong className="text-blue-700 font-mono">@{editingAccount.username}</strong>
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => setEditingAccount(null)}
@@ -1269,42 +1582,197 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </button>
               </div>
 
+              {editUserError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>{editUserError}</span>
+                </div>
+              )}
+
               <form onSubmit={handleSaveEditAccount} className="space-y-3.5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tên đăng nhập</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={editingAccount.username}
-                    className="w-full px-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-xl font-mono font-bold text-blue-700"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Họ tên nhân sự *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="VD: Nguyễn Văn Thắng"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Tên đăng nhập (Cố định)</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={editingAccount.username}
+                      className="w-full px-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-xl font-mono font-bold text-blue-700 cursor-not-allowed"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Phân quyền vai trò</label>
-                  <select
-                    value={editRoleValue}
-                    onChange={(e) => setEditRoleValue(e.target.value as any)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-semibold cursor-pointer"
-                  >
-                    <option value="admin">👑 Quản Trị Viên (Admin)</option>
-                    <option value="storekeeper">📦 Thủ Kho (Storekeeper)</option>
-                    <option value="supervisor">👷 Giám Sát (Supervisor)</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Số điện thoại liên hệ</label>
+                    <input
+                      type="tel"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="VD: 0915 123 456"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      placeholder="VD: thangnv@ct36.vn"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Đặt lại mật khẩu mới (để trống nếu giữ nguyên)</label>
-                  <input
-                    type="text"
-                    value={editPassValue}
-                    onChange={(e) => setEditPassValue(e.target.value)}
-                    placeholder="Nhập mật khẩu mới..."
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-mono"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Phân quyền vai trò</label>
+                    <select
+                      value={editRoleValue}
+                      onChange={(e) => setEditRoleValue(e.target.value as any)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-semibold cursor-pointer"
+                    >
+                      <option value="admin">👑 Quản Trị Viên (Admin)</option>
+                      <option value="storekeeper">📦 Thủ Kho (Storekeeper)</option>
+                      <option value="supervisor">👷 Giám Sát (Supervisor)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Mã Đơn Vị (Org ID)</label>
+                    <input
+                      type="text"
+                      value={editOrgId}
+                      onChange={(e) => setEditOrgId(e.target.value.toUpperCase())}
+                      placeholder="CT36"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-bold uppercase"
+                    />
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                {/* Đổi mật khẩu mới */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Đặt lại mật khẩu mới</span>
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditPassValue('123456')}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-medium cursor-pointer underline"
+                      >
+                        Đặt 123456
+                      </button>
+                      <span className="text-slate-300 text-[10px]">|</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const rand = Math.floor(100000 + Math.random() * 900000).toString();
+                          setEditPassValue(rand);
+                        }}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-medium cursor-pointer underline"
+                      >
+                        Tạo ngẫu nhiên
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type={editShowPass ? 'text' : 'password'}
+                      value={editPassValue}
+                      onChange={(e) => setEditPassValue(e.target.value)}
+                      placeholder="Để trống nếu muốn giữ nguyên mật khẩu cũ..."
+                      className="w-full pl-3 pr-8 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-600 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEditShowPass(!editShowPass)}
+                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {editShowPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Chỉ nhập khi cần cấp lại hoặc đổi mật khẩu cho tài khoản này.
+                  </p>
+                </div>
+
+                {/* Phân quyền truy cập các Chi nhánh / Doanh nghiệp */}
+                {tenants.length > 0 && (
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Quyền truy cập Doanh nghiệp / Chi nhánh</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editAllowedTenants.length === tenants.length) {
+                            setEditAllowedTenants([tenants[0].id]);
+                          } else {
+                            setEditAllowedTenants(tenants.map((t) => t.id));
+                          }
+                        }}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                      >
+                        {editAllowedTenants.length === tenants.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả chi nhánh'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-32 overflow-y-auto">
+                      {tenants.map((t) => {
+                        const isChecked = editAllowedTenants.includes(t.id);
+                        return (
+                          <label
+                            key={t.id}
+                            className={`flex items-center gap-2 p-1.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                              isChecked
+                                ? 'bg-blue-50/80 border-blue-200 text-blue-900 font-medium'
+                                : 'bg-white border-slate-200 text-slate-600'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setEditAllowedTenants([...editAllowedTenants, t.id]);
+                                } else {
+                                  setEditAllowedTenants(editAllowedTenants.filter((id) => id !== t.id));
+                                }
+                              }}
+                              className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                            />
+                            <div className="min-w-0 truncate">
+                              <span className="truncate block">{t.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">[{t.code}]</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setEditingAccount(null)}
@@ -1322,6 +1790,72 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Xác Nhận Xóa Tài Khoản */}
+        {deletingAccount && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-100 space-y-4">
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Xác Nhận Xóa Tài Khoản</h3>
+                  <p className="text-xs text-slate-500">Hành động này không thể hoàn tác</p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Họ và tên:</span>
+                  <strong className="text-slate-800 font-bold">{deletingAccount.name}</strong>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Tên đăng nhập:</span>
+                  <strong className="text-blue-700 font-mono">@{deletingAccount.username}</strong>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Vai trò:</span>
+                  <span className="font-semibold text-slate-700">
+                    {deletingAccount.role === 'admin'
+                      ? '👑 Quản Trị Viên'
+                      : deletingAccount.role === 'storekeeper'
+                      ? '📦 Thủ Kho'
+                      : '👷 Giám Sát'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Đơn vị:</span>
+                  <span className="text-slate-700">{deletingAccount.orgName || deletingAccount.orgId || 'CT36'}</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Bạn có chắc chắn muốn xóa tài khoản này khỏi cơ sở dữ liệu Firebase Realtime Database? Người dùng này sẽ không thể đăng nhập vào bất kỳ không gian làm việc nào nữa.
+              </p>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isDeletingUser}
+                  onClick={() => setDeletingAccount(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer disabled:opacity-50"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingUser}
+                  onClick={handleConfirmDeleteAccount}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isDeletingUser ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  <span>Xác Nhận Xóa Vĩnh Viễn</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

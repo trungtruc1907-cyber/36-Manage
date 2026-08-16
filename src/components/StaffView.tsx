@@ -12,24 +12,42 @@ import {
   Building2,
   CheckCircle2,
   Briefcase,
+  History,
+  Calendar,
+  Clock,
+  ArrowUpRight,
 } from 'lucide-react';
-import { StaffMember } from '../types';
+import { ConstructionProject, LaborDailyLog, StaffMember } from '../types';
+import { StaffAttendanceDetailModal } from './StaffAttendanceDetailModal';
 
 interface StaffViewProps {
   staff: StaffMember[];
+  laborLogs?: LaborDailyLog[];
+  projects?: ConstructionProject[];
   onAddStaff: (newStaff: StaffMember) => Promise<void> | void;
   onDeleteStaff?: (id: string) => Promise<void> | void;
+  onUpdateLaborLog?: (log: LaborDailyLog) => Promise<void> | void;
+  onDeleteLaborLog?: (logId: string) => Promise<void> | void;
+  onAddLaborLog?: (log: LaborDailyLog) => Promise<void> | void;
 }
 
 export const StaffView: React.FC<StaffViewProps> = ({
   staff,
+  laborLogs = [],
+  projects = [],
   onAddStaff,
   onDeleteStaff,
+  onUpdateLaborLog,
+  onDeleteLaborLog,
+  onAddLaborLog,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+
+  // Selected staff for viewing / editing detailed attendance history
+  const [selectedStaffForAttendance, setSelectedStaffForAttendance] = useState<StaffMember | null>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -43,6 +61,45 @@ export const StaffView: React.FC<StaffViewProps> = ({
     if (val === undefined || isNaN(val)) return '0 đ';
     return new Intl.NumberFormat('vi-VN').format(val) + ' đ';
   };
+
+  // Helper to calculate total attendance workdays and costs for a staff member
+  const getStaffAttendanceSummary = useMemo(() => {
+    const map = new Map<string, { totalWorkdays: number; totalCost: number; logCount: number }>();
+
+    staff.forEach((s) => {
+      const sName = s.name.trim().toLowerCase();
+      let totalWorkdays = 0;
+      let totalCost = 0;
+      let logCount = 0;
+
+      laborLogs.forEach((log) => {
+        if (log.workerDetails && Array.isArray(log.workerDetails) && log.workerDetails.length > 0) {
+          log.workerDetails.forEach((wd) => {
+            if (wd.name && wd.name.trim().toLowerCase() === sName) {
+              const wdCost = wd.cost || (wd.workdays || 1.0) * (wd.dailyWage || s.dailyWage || 450000);
+              totalWorkdays += wd.workdays || 1.0;
+              totalCost += wdCost;
+              logCount++;
+            }
+          });
+        } else if (log.workerNames && Array.isArray(log.workerNames)) {
+          const found = log.workerNames.some((wn) => wn && wn.trim().toLowerCase() === sName);
+          if (found) {
+            const count = log.workerNames.length || 1;
+            const wdays = log.totalWorkdays ? log.totalWorkdays / count : 1.0;
+            const wCost = log.totalCost ? log.totalCost / count : wdays * (s.dailyWage || 450000);
+            totalWorkdays += wdays;
+            totalCost += wCost;
+            logCount++;
+          }
+        }
+      });
+
+      map.set(s.id, { totalWorkdays, totalCost, logCount });
+    });
+
+    return map;
+  }, [staff, laborLogs]);
 
   // Open modal for Adding
   const handleOpenAddModal = () => {
@@ -265,6 +322,11 @@ export const StaffView: React.FC<StaffViewProps> = ({
             w.role.toLowerCase().includes('kỹ sư') ||
             w.role.toLowerCase().includes('giám sát') ||
             w.role.toLowerCase().includes('chỉ huy');
+          const attStats = getStaffAttendanceSummary.get(w.id) || {
+            totalWorkdays: 0,
+            totalCost: 0,
+            logCount: 0,
+          };
 
           return (
             <div
@@ -301,7 +363,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
                       type="button"
                       onClick={() => handleOpenEditModal(w)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all cursor-pointer"
-                      title="Sửa thông tin"
+                      title="Sửa thông tin hồ sơ"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
@@ -350,24 +412,64 @@ export const StaffView: React.FC<StaffViewProps> = ({
                     </span>
                   </div>
                 </div>
+
+                {/* Attendance Summary Mini-Banner */}
+                <div className="bg-blue-50/60 rounded-xl p-2.5 border border-blue-100 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                      Đã chấm công:
+                    </span>
+                    <p className="font-bold text-slate-900 mt-0.5 text-xs">
+                      {attStats.totalWorkdays.toFixed(1)} Công{' '}
+                      <span className="text-slate-400 font-normal text-[10px]">
+                        ({attStats.logCount} buổi)
+                      </span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400">Tích lũy lương</span>
+                    <p className="font-bold text-emerald-700 text-xs mt-0.5">
+                      {formatCurrency(attStats.totalCost)}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              {/* Status / Assignment footer */}
-              <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                <span className="text-slate-400 flex items-center gap-1">
-                  <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                  Phụ trách:
-                </span>
-                <span
-                  className={`font-semibold px-2.5 py-0.5 rounded-lg border truncate max-w-[190px] ${
-                    isReady
-                      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                      : 'text-amber-700 bg-amber-50 border-amber-200'
-                  }`}
-                  title={w.status}
+              {/* Action Buttons & Status */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                {/* View / Edit Attendance History Button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedStaffForAttendance(w)}
+                  className="w-full py-2 px-3 bg-slate-900 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-between cursor-pointer group/btn"
                 >
-                  {w.status}
-                </span>
+                  <span className="flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-blue-300" />
+                    <span>Lịch sử chấm công</span>
+                  </span>
+                  <span className="text-[11px] font-medium bg-white/20 px-2 py-0.5 rounded-lg group-hover/btn:bg-white/30 transition-colors">
+                    Xem & Sửa →
+                  </span>
+                </button>
+
+                {/* Status / Assignment footer */}
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-400 flex items-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                    Phụ trách:
+                  </span>
+                  <span
+                    className={`font-semibold px-2.5 py-0.5 rounded-lg border truncate max-w-[170px] ${
+                      isReady
+                        ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                        : 'text-amber-700 bg-amber-50 border-amber-200'
+                    }`}
+                    title={w.status}
+                  >
+                    {w.status}
+                  </span>
+                </div>
               </div>
             </div>
           );
@@ -558,6 +660,19 @@ export const StaffView: React.FC<StaffViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+      {/* Modal View & Edit Attendance Details for specific staff */}
+      {selectedStaffForAttendance && (
+        <StaffAttendanceDetailModal
+          isOpen={Boolean(selectedStaffForAttendance)}
+          onClose={() => setSelectedStaffForAttendance(null)}
+          staffMember={selectedStaffForAttendance}
+          laborLogs={laborLogs}
+          projects={projects}
+          onUpdateLaborLog={onUpdateLaborLog}
+          onDeleteLaborLog={onDeleteLaborLog}
+          onAddLaborLog={onAddLaborLog}
+        />
       )}
     </div>
   );
