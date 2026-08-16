@@ -9,10 +9,8 @@ import {
   Trash2,
   Edit,
   X,
-  Database,
   Building2,
   CheckCircle2,
-  TrendingUp,
   Briefcase,
 } from 'lucide-react';
 import { StaffMember } from '../types';
@@ -135,14 +133,10 @@ export const StaffView: React.FC<StaffViewProps> = ({
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
               Đội Ngũ Nhân Sự & Thợ Thi Công
             </h2>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <Database className="w-3.5 h-3.5" />
-              Realtime Database ({staff.length})
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+              {staff.length} Nhân Sự
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Quản lý thông tin thợ chính, kỹ sư giám sát và đơn giá lương ngày cho từng nhân sự
-          </p>
         </div>
 
         <button
@@ -412,7 +406,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
                   <p className="text-[11px] text-slate-400">
                     {editingStaff
                       ? `Chỉnh sửa hồ sơ cho ${editingStaff.name}`
-                      : 'Lưu thông tin nhân sự và đơn giá lương ngày vào Realtime Database'}
+                      : 'Nhập thông tin nhân sự và đơn giá lương ngày'}
                   </p>
                 </div>
               </div>
