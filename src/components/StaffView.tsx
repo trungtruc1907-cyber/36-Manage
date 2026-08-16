@@ -165,8 +165,18 @@ export const StaffView: React.FC<StaffViewProps> = ({
         ))}
 
         {filtered.length === 0 && (
-          <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-slate-200 text-slate-400 text-xs">
-            Không tìm thấy nhân sự phù hợp với từ khóa "{searchTerm}"
+          <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs space-y-2">
+            <Users className="w-8 h-8 text-slate-300 mx-auto" />
+            <p className="font-semibold text-slate-600 text-sm">
+              {searchTerm
+                ? `Không tìm thấy nhân sự phù hợp với từ khóa "${searchTerm}"`
+                : 'Chưa có nhân sự nào trong cơ sở dữ liệu'}
+            </p>
+            <p className="text-slate-400 text-[11px]">
+              {searchTerm
+                ? 'Vui lòng kiểm tra lại từ khóa tìm kiếm'
+                : 'Nhấn nút "Thêm nhân sự mới" để thêm thông tin thợ và chỉ huy vào hệ thống'}
+            </p>
           </div>
         )}
       </div>

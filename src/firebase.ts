@@ -208,20 +208,82 @@ export async function seedSampleDataToDatabase() {
 // Backward compatibility alias
 export const seedSampleDataToFirestore = seedSampleDataToDatabase;
 
-// Seed initial collections if database is empty
-export async function seedInitialDataIfEmpty() {
+// Purge all mock/demo initial data records from Firebase Realtime Database
+export async function purgeAllDemoDataFromDatabase() {
   try {
-    const snap = await get(ref(db, 'projects'));
-    if (!snap.exists() || !snap.val() || Object.keys(snap.val()).length === 0) {
-      console.log('Realtime Database is empty. Auto-seeding initial waterproofing data...');
-      await seedSampleDataToDatabase();
+    const demoProjectIds = [
+      'proj_muongthanh_01',
+      'proj_vincom_02',
+      'proj_flc_03',
+      'proj_hopluc_04',
+      'proj_eurowindow_05',
+      'proj_foxconn_06',
+    ];
+    for (const id of demoProjectIds) {
+      await remove(ref(db, `projects/${id}`)).catch(() => {});
     }
+
+    const demoMatIds = [
+      'mat_sikatop107',
+      'mat_neomax201',
+      'mat_mangbitum4mm',
+      'mat_sikagrout214',
+      'mat_sikadur731',
+      'mat_sikalatexth',
+      'mat_quicseal104s',
+      'mat_hyperseal25lm',
+      'mat_mariseal250',
+      'mat_sikawaterbarv20',
+      'mat_luoithuytinh140',
+      'mat_foamchemfixpu',
+    ];
+    for (const id of demoMatIds) {
+      await remove(ref(db, `materials/${id}`)).catch(() => {});
+    }
+
+    const demoExpIds = [
+      'exp_001',
+      'exp_002',
+      'exp_003',
+      'exp_004',
+      'exp_005',
+      'exp_006',
+      'exp_007',
+      'exp_008',
+    ];
+    for (const id of demoExpIds) {
+      await remove(ref(db, `exportedGoods/${id}`)).catch(() => {});
+    }
+
+    const demoStaffIds = [
+      'staff_hung_01',
+      'staff_tuan_02',
+      'staff_nam_03',
+      'staff_hai_04',
+      'staff_quang_05',
+      'staff_minh_06',
+    ];
+    for (const id of demoStaffIds) {
+      await remove(ref(db, `staff/${id}`)).catch(() => {});
+    }
+
+    for (let i = 1; i <= 20; i++) {
+      await remove(ref(db, `laborLogs/log_sample_${i}`)).catch(() => {});
+    }
+
+    console.log('Finished purging demo mock records from Firebase Realtime Database.');
   } catch (err) {
-    console.warn('Could not check/seed empty Realtime Database:', err);
+    console.warn('Note during demo data purge:', err);
   }
 }
 
-// Clear all data in Firebase Realtime Database
+// Seed initial collections if database is empty (Disabled: only loads real DB data)
+export async function seedInitialDataIfEmpty() {
+  // Intentionally empty: do NOT auto-seed demo data on startup/reload
+  return;
+}
+
+// Clear all business data in Firebase Realtime Database
 export async function clearAllDatabaseData() {
   const nodes = ['projects', 'materials', 'exportedGoods', 'laborLogs', 'staff'];
   for (const node of nodes) {

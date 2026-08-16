@@ -317,136 +317,153 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Chart Canvas */}
         <div className="h-[220px] sm:h-[260px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            {chartType === 'bar' ? (
-              <BarChart
-                data={chartData}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+          {laborLogs.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+              <Users className="w-8 h-8 text-slate-300 mb-2" />
+              <p className="text-xs font-semibold text-slate-600">Chưa có nhật ký chấm công trong cơ sở dữ liệu</p>
+              <p className="text-[11px] text-slate-400 mt-0.5 max-w-sm">
+                Nhấn vào nút bên dưới để ghi nhận nhật ký chấm công theo ngày và theo công trình
+              </p>
+              <button
+                type="button"
+                onClick={onOpenLaborDetail}
+                className="mt-3 px-3.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-semibold border border-blue-200/60 cursor-pointer"
               >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="displayLabel"
-                  axisLine={{ stroke: '#e2e8f0' }}
-                  tickLine={false}
-                  tick={{ fill: '#64748b', fontSize: 11 }}
-                  dy={6}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#94a3b8', fontSize: 11 }}
-                  domain={[0, chartMetric === 'workdays' ? 20 : 3000000]}
-                  ticks={
-                    chartMetric === 'workdays'
-                      ? [0, 10, 20]
-                      : [0, 1000000, 2000000, 3000000]
-                  }
-                  tickFormatter={(val) => {
-                    if (chartMetric === 'workdays') return `${val} c`;
-                    if (val === 0) return '0';
-                    return `${val / 1000000}tr`;
-                  }}
-                />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-slate-900 text-white p-2.5 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
-                          <p className="font-bold text-blue-300">
-                            {data.date} ({data.dayOfWeek})
-                          </p>
-                          <div className="flex justify-between gap-4 text-slate-300">
-                            <span>Tổng công:</span>
-                            <span className="font-bold text-white">{data.workdays} Công</span>
-                          </div>
-                          <div className="flex justify-between gap-4 text-slate-300">
-                            <span>Chi phí:</span>
-                            <span className="font-bold text-emerald-400">
-                              {formatCurrency(data.cost)} đ
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-slate-400 border-t border-slate-800 pt-1 mt-1 truncate max-w-[200px]">
-                            {data.notes}
-                          </p>
-                        </div>
-                      );
+                + Ghi nhận chấm công
+              </button>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              {chartType === 'bar' ? (
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis
+                    dataKey="displayLabel"
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    dy={6}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    domain={[0, chartMetric === 'workdays' ? 20 : 3000000]}
+                    ticks={
+                      chartMetric === 'workdays'
+                        ? [0, 10, 20]
+                        : [0, 1000000, 2000000, 3000000]
                     }
-                    return null;
-                  }}
-                />
-                <Bar
-                  dataKey={chartMetric === 'workdays' ? 'workdays' : 'cost'}
-                  fill="#0c5ec7"
-                  radius={[6, 6, 0, 0]}
-                  maxBarSize={38}
-                />
-              </BarChart>
-            ) : (
-              <LineChart
-                data={chartData}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="displayLabel"
-                  axisLine={{ stroke: '#e2e8f0' }}
-                  tickLine={false}
-                  tick={{ fill: '#64748b', fontSize: 11 }}
-                  dy={6}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#94a3b8', fontSize: 11 }}
-                  domain={[0, chartMetric === 'workdays' ? 20 : 3000000]}
-                  ticks={
-                    chartMetric === 'workdays'
-                      ? [0, 10, 20]
-                      : [0, 1000000, 2000000, 3000000]
-                  }
-                  tickFormatter={(val) => {
-                    if (chartMetric === 'workdays') return `${val} c`;
-                    if (val === 0) return '0';
-                    return `${val / 1000000}tr`;
-                  }}
-                />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-slate-900 text-white p-2.5 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
-                          <p className="font-bold text-blue-300">
-                            {data.date} ({data.dayOfWeek})
-                          </p>
-                          <div className="flex justify-between gap-4 text-slate-300">
-                            <span>Tổng công:</span>
-                            <span className="font-bold text-white">{data.workdays} Công</span>
+                    tickFormatter={(val) => {
+                      if (chartMetric === 'workdays') return `${val} c`;
+                      if (val === 0) return '0';
+                      return `${val / 1000000}tr`;
+                    }}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white p-2.5 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                            <p className="font-bold text-blue-300">
+                              {data.date} ({data.dayOfWeek})
+                            </p>
+                            <div className="flex justify-between gap-4 text-slate-300">
+                              <span>Tổng công:</span>
+                              <span className="font-bold text-white">{data.workdays} Công</span>
+                            </div>
+                            <div className="flex justify-between gap-4 text-slate-300">
+                              <span>Chi phí:</span>
+                              <span className="font-bold text-emerald-400">
+                                {formatCurrency(data.cost)} đ
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 border-t border-slate-800 pt-1 mt-1 truncate max-w-[200px]">
+                              {data.notes}
+                            </p>
                           </div>
-                          <div className="flex justify-between gap-4 text-slate-300">
-                            <span>Chi phí:</span>
-                            <span className="font-bold text-emerald-400">
-                              {formatCurrency(data.cost)} đ
-                            </span>
-                          </div>
-                        </div>
-                      );
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar
+                    dataKey={chartMetric === 'workdays' ? 'workdays' : 'cost'}
+                    fill="#0c5ec7"
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={38}
+                  />
+                </BarChart>
+              ) : (
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis
+                    dataKey="displayLabel"
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    dy={6}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    domain={[0, chartMetric === 'workdays' ? 20 : 3000000]}
+                    ticks={
+                      chartMetric === 'workdays'
+                        ? [0, 10, 20]
+                        : [0, 1000000, 2000000, 3000000]
                     }
-                    return null;
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey={chartMetric === 'workdays' ? 'workdays' : 'cost'}
-                  stroke="#0c5ec7"
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: '#0c5ec7', strokeWidth: 2, stroke: '#fff' }}
-                  activeDot={{ r: 6, fill: '#1d4ed8' }}
-                />
-              </LineChart>
-            )}
-          </ResponsiveContainer>
+                    tickFormatter={(val) => {
+                      if (chartMetric === 'workdays') return `${val} c`;
+                      if (val === 0) return '0';
+                      return `${val / 1000000}tr`;
+                    }}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white p-2.5 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                            <p className="font-bold text-blue-300">
+                              {data.date} ({data.dayOfWeek})
+                            </p>
+                            <div className="flex justify-between gap-4 text-slate-300">
+                              <span>Tổng công:</span>
+                              <span className="font-bold text-white">{data.workdays} Công</span>
+                            </div>
+                            <div className="flex justify-between gap-4 text-slate-300">
+                              <span>Chi phí:</span>
+                              <span className="font-bold text-emerald-400">
+                                {formatCurrency(data.cost)} đ
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey={chartMetric === 'workdays' ? 'workdays' : 'cost'}
+                    stroke="#0c5ec7"
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: '#0c5ec7', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6, fill: '#1d4ed8' }}
+                  />
+                </LineChart>
+              )}
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -548,9 +565,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Goods List Cards */}
         <div className="space-y-2.5">
           {filteredGoods.length === 0 ? (
-            <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            <div className="text-center py-10 bg-slate-50/70 rounded-2xl border border-dashed border-slate-200">
               <Archive className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-600">Không tìm thấy hàng hóa xuất cho danh mục này</p>
+              <p className="text-sm font-semibold text-slate-600">Chưa có phiếu xuất vật tư nào trong cơ sở dữ liệu</p>
+              <p className="text-xs text-slate-400 mt-1">Bấm nút "Xuất vật tư" để tạo phiếu xuất kho cho công trình</p>
+              <button
+                type="button"
+                onClick={onOpenNewExport}
+                className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tạo phiếu xuất vật tư</span>
+              </button>
             </div>
           ) : (
             filteredGoods.map((item, idx) => (

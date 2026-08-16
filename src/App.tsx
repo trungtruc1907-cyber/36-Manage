@@ -44,8 +44,8 @@ import {
   addStaffToFirestore,
   deleteStaffFromFirestore,
   clearAllDatabaseData,
+  purgeAllDemoDataFromDatabase,
   seedSampleDataToFirestore,
-  seedInitialDataIfEmpty,
   INITIAL_USER_ACCOUNTS,
 } from './firebase';
 import { LoginScreen } from './components/LoginScreen';
@@ -86,12 +86,12 @@ export default function App() {
   // Mobile sidebar drawer state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Core business data states - starts with authentic waterproofing data and syncs with Firestore
-  const [exportedGoods, setExportedGoods] = useState<ExportedGood[]>(INITIAL_EXPORTED_GOODS);
-  const [laborLogs, setLaborLogs] = useState<LaborDailyLog[]>(INITIAL_LABOR_LOGS);
-  const [projects, setProjects] = useState<ConstructionProject[]>(INITIAL_PROJECTS);
-  const [materials, setMaterials] = useState<MaterialItem[]>(INITIAL_MATERIALS);
-  const [staff, setStaff] = useState<StaffMember[]>(INITIAL_STAFF);
+  // Core business data states - only populated directly from Firebase Realtime Database
+  const [exportedGoods, setExportedGoods] = useState<ExportedGood[]>([]);
+  const [laborLogs, setLaborLogs] = useState<LaborDailyLog[]>([]);
+  const [projects, setProjects] = useState<ConstructionProject[]>([]);
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [companySettings, setCompanySettings] = useState<CompanySettings>(() => {
     const saved = localStorage.getItem('chongtham36_company_settings');
     if (saved) {
@@ -130,38 +130,28 @@ export default function App() {
       setIsFirebaseConnected(connected);
     });
 
-    // Auto-seed initial data to Firestore if empty
-    seedInitialDataIfEmpty();
+    // Clean up any old demo mock data from Realtime Database (runs once without re-adding)
+    purgeAllDemoDataFromDatabase();
 
     // Subscribe to all collections in real-time
     const unsubProjects = subscribeProjects((data) => {
-      if (data && data.length > 0) {
-        setProjects(data);
-      }
+      setProjects(data || []);
     });
 
     const unsubMaterials = subscribeMaterials((data) => {
-      if (data && data.length > 0) {
-        setMaterials(data);
-      }
+      setMaterials(data || []);
     });
 
     const unsubExports = subscribeExportedGoods((data) => {
-      if (data && data.length > 0) {
-        setExportedGoods(data);
-      }
+      setExportedGoods(data || []);
     });
 
     const unsubLabor = subscribeLaborLogs((data) => {
-      if (data && data.length > 0) {
-        setLaborLogs(data);
-      }
+      setLaborLogs(data || []);
     });
 
     const unsubStaff = subscribeStaff((data) => {
-      if (data && data.length > 0) {
-        setStaff(data);
-      }
+      setStaff(data || []);
     });
 
     const unsubCompanySettings = subscribeCompanySettings((data) => {
