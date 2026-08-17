@@ -20,8 +20,9 @@ import {
   Users,
   Printer,
   FileSpreadsheet,
+  Lock,
 } from 'lucide-react';
-import { ConstructionProject, ExportedGood, LaborDailyLog, StaffMember, CompanySettings } from '../types';
+import { ConstructionProject, ExportedGood, LaborDailyLog, StaffMember, CompanySettings, UserAccount, hasUserPermission } from '../types';
 import { exportProjectToExcel, printProjectReport } from '../utils/projectExportUtils';
 
 interface ProjectsViewProps {
@@ -30,6 +31,7 @@ interface ProjectsViewProps {
   laborLogs?: LaborDailyLog[];
   staff?: StaffMember[];
   companySettings?: CompanySettings;
+  currentUser?: UserAccount | null;
   onOpenNewProject: () => void;
   onEditProject?: (project: ConstructionProject) => void;
   onDeleteProject?: (id: string) => Promise<void> | void;
@@ -44,6 +46,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   laborLogs = [],
   staff = [],
   companySettings,
+  currentUser,
   onOpenNewProject,
   onEditProject,
   onDeleteProject,
@@ -51,6 +54,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   onOpenExportForProject,
   onOpenLaborForProject,
 }) => {
+  const canExportExcel = hasUserPermission(currentUser, 'canExportExcel');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -771,12 +775,21 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       {/* Nút Xuất file Excel */}
                       <button
                         type="button"
-                        onClick={() => exportProjectToExcel(selectedProjectDetail, stats.exportsList, stats.laborList, companySettings)}
-                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
-                        title="Xuất file Excel báo cáo công trình"
+                        disabled={!canExportExcel}
+                        onClick={() => {
+                          if (!canExportExcel) return;
+                          exportProjectToExcel(selectedProjectDetail, stats.exportsList, stats.laborList, companySettings);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs ${
+                          canExportExcel
+                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 cursor-pointer'
+                            : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-70'
+                        }`}
+                        title={canExportExcel ? 'Xuất file Excel báo cáo công trình' : 'Tài khoản chưa được cấp quyền xuất file Excel'}
                       >
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+                        <FileSpreadsheet className={`w-3.5 h-3.5 ${canExportExcel ? 'text-emerald-700' : 'text-slate-400'}`} />
                         <span>Xuất File Excel</span>
+                        {!canExportExcel && <Lock className="w-3 h-3 text-slate-400" />}
                       </button>
 
                       {selectedProjectDetail.status !== 'completed' && (

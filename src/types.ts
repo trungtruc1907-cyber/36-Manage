@@ -17,6 +17,44 @@ export interface TenantOrganization {
   updatedAt?: string;
 }
 
+export interface UserPermissions {
+  canViewMaterialCost?: boolean;       // Được xem giá vốn vật tư & giá trị tồn kho
+  canExportExcel?: boolean;             // Được xuất file excel (vật tư, xuất kho, chấm công, dự án...)
+  canViewAllActivityLogs?: boolean;     // Được xem lịch sử thao tác của các user khác
+  canChangeBrandLogo?: boolean;         // Được quyền thay đổi logo thương hiệu
+  canEditCompanyInfo?: boolean;         // Được quyền thay đổi Thông Tin Doanh Nghiệp & Chi Nhánh
+  canViewUserList?: boolean;            // Được quyền xem danh sách user
+}
+
+export const DEFAULT_ADMIN_PERMISSIONS: UserPermissions = {
+  canViewMaterialCost: true,
+  canExportExcel: true,
+  canViewAllActivityLogs: true,
+  canChangeBrandLogo: true,
+  canEditCompanyInfo: true,
+  canViewUserList: true,
+};
+
+export const DEFAULT_USER_PERMISSIONS: UserPermissions = {
+  canViewMaterialCost: false,
+  canExportExcel: false,
+  canViewAllActivityLogs: false,
+  canChangeBrandLogo: false,
+  canEditCompanyInfo: false,
+  canViewUserList: false,
+};
+
+export function hasUserPermission(
+  user: UserAccount | null | undefined,
+  permission: keyof UserPermissions
+): boolean {
+  if (!user) return false;
+  if (user.role === 'admin' || user.username?.toLowerCase() === 'admin') {
+    return true;
+  }
+  return !!user.permissions?.[permission];
+}
+
 export interface UserAccount {
   username: string;
   role: 'admin' | 'supervisor' | 'storekeeper';
@@ -28,6 +66,7 @@ export interface UserAccount {
   allowedTenants?: string[];
   isTenantOwner?: boolean;
   createdTenantId?: string;
+  permissions?: UserPermissions;
 }
 
 export interface UserAccountRecord extends UserAccount {

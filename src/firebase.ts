@@ -46,6 +46,14 @@ export const INITIAL_USER_ACCOUNTS: UserAccountRecord[] = [
     email: 'admin@chongtham36.vn',
     createdAt: '01/01/2026',
     allowedTenants: ['tenant_ct36', 'tenant_hanoi', 'tenant_hcm'],
+    permissions: {
+      canViewMaterialCost: true,
+      canExportExcel: true,
+      canViewAllActivityLogs: true,
+      canChangeBrandLogo: true,
+      canEditCompanyInfo: true,
+      canViewUserList: true,
+    },
   },
   {
     username: 'thukho',
@@ -58,6 +66,14 @@ export const INITIAL_USER_ACCOUNTS: UserAccountRecord[] = [
     email: 'thukho@chongtham36.vn',
     createdAt: '05/01/2026',
     allowedTenants: ['tenant_ct36'],
+    permissions: {
+      canViewMaterialCost: true,
+      canExportExcel: true,
+      canViewAllActivityLogs: false,
+      canChangeBrandLogo: false,
+      canEditCompanyInfo: false,
+      canViewUserList: true,
+    },
   },
   {
     username: 'giamsat',
@@ -70,6 +86,14 @@ export const INITIAL_USER_ACCOUNTS: UserAccountRecord[] = [
     email: 'giamsat@chongtham36.vn',
     createdAt: '10/01/2026',
     allowedTenants: ['tenant_ct36'],
+    permissions: {
+      canViewMaterialCost: false,
+      canExportExcel: true,
+      canViewAllActivityLogs: false,
+      canChangeBrandLogo: false,
+      canEditCompanyInfo: false,
+      canViewUserList: true,
+    },
   },
 ];
 

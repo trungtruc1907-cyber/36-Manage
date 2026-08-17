@@ -32,11 +32,77 @@ import {
   X,
   Lock,
   Edit2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
-import { CompanySettings, TenantOrganization, UserAccount, UserAccountRecord, LoginHistoryRecord } from '../types';
+import {
+  CompanySettings,
+  TenantOrganization,
+  UserAccount,
+  UserAccountRecord,
+  LoginHistoryRecord,
+  UserPermissions,
+  DEFAULT_ADMIN_PERMISSIONS,
+  DEFAULT_USER_PERMISSIONS,
+  hasUserPermission,
+} from '../types';
 import { DEFAULT_COMPANY_SETTINGS } from '../data/mockData';
 import { INITIAL_USER_ACCOUNTS } from '../firebase';
+
+export const PERMISSION_ITEMS: {
+  key: keyof UserPermissions;
+  label: string;
+  description: string;
+  badge: string;
+  icon: any;
+}[] = [
+  {
+    key: 'canViewMaterialCost',
+    label: 'Xem giá vốn vật tư',
+    description: 'Được xem đơn giá vốn, chi phí nhập kho và tổng giá trị vốn tồn kho.',
+    badge: 'Giá Vốn',
+    icon: Eye,
+  },
+  {
+    key: 'canExportExcel',
+    label: 'Xuất file Excel',
+    description: 'Được tải file Excel danh mục vật tư, phiếu xuất kho, bảng chấm công & dự án.',
+    badge: 'Xuất Excel',
+    icon: FileSpreadsheet,
+  },
+  {
+    key: 'canViewAllActivityLogs',
+    label: 'Xem lịch sử thao tác của các user khác',
+    description: 'Được xem nhật ký hoạt động, thao tác dữ liệu và lịch sử đăng nhập toàn hệ thống.',
+    badge: 'Nhật Ký',
+    icon: History,
+  },
+  {
+    key: 'canChangeBrandLogo',
+    label: 'Thay đổi logo thương hiệu',
+    description: 'Được tải lên logo mới hoặc tùy biến biểu trưng nhận diện thương hiệu.',
+    badge: 'Đổi Logo',
+    icon: ImageIcon,
+  },
+  {
+    key: 'canEditCompanyInfo',
+    label: 'Thay đổi Thông Tin Doanh Nghiệp & Chi Nhánh',
+    description: 'Được chỉnh sửa tên doanh nghiệp, MST, địa chỉ, tài khoản ngân hàng chi nhánh.',
+    badge: 'TT Doanh Nghiệp',
+    icon: Building2,
+  },
+  {
+    key: 'canViewUserList',
+    label: 'Xem danh sách user',
+    description: 'Được xem danh sách tài khoản người dùng và nhân sự hệ thống trong chi nhánh.',
+    badge: 'DS User',
+    icon: Users,
+  },
+];
 
 interface SettingsViewProps {
   currentUser: UserAccount | null;
@@ -52,7 +118,6 @@ interface SettingsViewProps {
   tenants?: TenantOrganization[];
   activeTenantId?: string;
   onSelectTenant?: (tenantId: string) => void;
-  onOpenTenantManager?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -69,7 +134,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   tenants = [],
   activeTenantId,
   onSelectTenant,
-  onOpenTenantManager,
 }) => {
   // Form states
   const [formData, setFormData] = useState<CompanySettings>(companySettings);
@@ -79,8 +143,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Admin permission check
+  // Permission checks
   const isAdmin = currentUser?.role === 'admin' || currentUser?.username?.toLowerCase() === 'admin';
+  const canChangeBrandLogo = hasUserPermission(currentUser, 'canChangeBrandLogo');
+  const canEditCompanyInfo = hasUserPermission(currentUser, 'canEditCompanyInfo');
+  const canViewUserList = hasUserPermission(currentUser, 'canViewUserList');
+  const canViewAllActivityLogs = hasUserPermission(currentUser, 'canViewAllActivityLogs');
 
   // Password Change state for active user
   const [newPassword, setNewPassword] = useState('');
@@ -99,6 +167,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [addPhone, setAddPhone] = useState('');
   const [addEmail, setAddEmail] = useState('');
   const [addAllowedTenants, setAddAllowedTenants] = useState<string[]>([]);
+  const [addPermissions, setAddPermissions] = useState<UserPermissions>({
+    canViewMaterialCost: false,
+    canExportExcel: true,
+    canViewAllActivityLogs: false,
+    canChangeBrandLogo: false,
+    canEditCompanyInfo: false,
+    canViewUserList: true,
+  });
   const [addUserError, setAddUserError] = useState('');
   const [isSavingUser, setIsSavingUser] = useState(false);
 
@@ -113,6 +189,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [editPassValue, setEditPassValue] = useState('');
   const [editShowPass, setEditShowPass] = useState(false);
   const [editAllowedTenants, setEditAllowedTenants] = useState<string[]>([]);
+  const [editPermissions, setEditPermissions] = useState<UserPermissions>({
+    canViewMaterialCost: false,
+    canExportExcel: true,
+    canViewAllActivityLogs: false,
+    canChangeBrandLogo: false,
+    canEditCompanyInfo: false,
+    canViewUserList: true,
+  });
   const [editUserError, setEditUserError] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -127,8 +211,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // Login History Search & Filter states
   const [searchLoginQuery, setSearchLoginQuery] = useState('');
   const [filterLoginStatus, setFilterLoginStatus] = useState<'all' | 'success' | 'failed'>('all');
+  const [loginPage, setLoginPage] = useState(1);
+  const [logsPerPage, setLogsPerPage] = useState(10);
   const [isConfirmingClearLogs, setIsConfirmingClearLogs] = useState(false);
   const [isClearingLogs, setIsClearingLogs] = useState(false);
+
+  // Reset page to 1 when search, status filter or page size changes
+  useEffect(() => {
+    setLoginPage(1);
+  }, [searchLoginQuery, filterLoginStatus, logsPerPage]);
 
   // Clear & Seed data states
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
@@ -138,6 +229,43 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [seedSuccess, setSeedSuccess] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Helper: Apply permission preset
+  const handleApplyPreset = (
+    preset: 'full' | 'storekeeper' | 'supervisor' | 'none',
+    setter: React.Dispatch<React.SetStateAction<UserPermissions>>
+  ) => {
+    if (preset === 'full') {
+      setter({ ...DEFAULT_ADMIN_PERMISSIONS });
+    } else if (preset === 'storekeeper') {
+      setter({
+        canViewMaterialCost: true,
+        canExportExcel: true,
+        canViewAllActivityLogs: false,
+        canChangeBrandLogo: false,
+        canEditCompanyInfo: false,
+        canViewUserList: true,
+      });
+    } else if (preset === 'supervisor') {
+      setter({
+        canViewMaterialCost: false,
+        canExportExcel: true,
+        canViewAllActivityLogs: false,
+        canChangeBrandLogo: false,
+        canEditCompanyInfo: false,
+        canViewUserList: true,
+      });
+    } else {
+      setter({
+        canViewMaterialCost: false,
+        canExportExcel: false,
+        canViewAllActivityLogs: false,
+        canChangeBrandLogo: false,
+        canEditCompanyInfo: false,
+        canViewUserList: false,
+      });
+    }
+  };
 
   // Handle password change for active user
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -165,6 +293,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       orgName: currentUser.orgName,
       phone: currentUser.phone || existing?.phone,
       email: currentUser.email || existing?.email,
+      permissions: currentUser.permissions || existing?.permissions,
       password: newPassword.trim(),
     };
 
@@ -189,6 +318,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setAddPhone('');
     setAddEmail('');
     setAddAllowedTenants(activeTenantId ? [activeTenantId] : ['tenant_ct36']);
+    setAddPermissions({
+      canViewMaterialCost: false,
+      canExportExcel: true,
+      canViewAllActivityLogs: false,
+      canChangeBrandLogo: false,
+      canEditCompanyInfo: false,
+      canViewUserList: true,
+    });
     setIsAddUserOpen(true);
   };
 
@@ -225,6 +362,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     const targetTenant = tenants.find((t) => t.code?.toUpperCase() === cleanOrg || t.id === addAllowedTenants[0]);
     const orgName = targetTenant?.name || companySettings?.orgName || `Đơn vị ${cleanOrg}`;
 
+    const finalPermissions = addRole === 'admin' ? DEFAULT_ADMIN_PERMISSIONS : addPermissions;
+
     const newAcc: UserAccountRecord = {
       username: cleanUsername,
       password: cleanPass,
@@ -235,6 +374,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       phone: addPhone.trim() || undefined,
       email: addEmail.trim() || undefined,
       allowedTenants: addAllowedTenants.length > 0 ? addAllowedTenants : undefined,
+      permissions: finalPermissions,
       createdAt: new Date().toLocaleDateString('vi-VN'),
     };
 
@@ -263,6 +403,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setEditPassValue('');
     setEditShowPass(false);
     setEditAllowedTenants(acc.allowedTenants || (acc.createdTenantId ? [acc.createdTenantId] : ['tenant_ct36']));
+    setEditPermissions(
+      acc.permissions ||
+      (acc.role === 'admin'
+        ? DEFAULT_ADMIN_PERMISSIONS
+        : {
+            canViewMaterialCost: acc.role === 'storekeeper',
+            canExportExcel: true,
+            canViewAllActivityLogs: false,
+            canChangeBrandLogo: false,
+            canEditCompanyInfo: false,
+            canViewUserList: true,
+          })
+    );
     setEditUserError('');
   };
 
@@ -284,6 +437,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const targetTenant = tenants.find((t) => t.code?.toUpperCase() === cleanOrg || t.id === editAllowedTenants[0]);
       const orgName = editOrgName.trim() || targetTenant?.name || editingAccount.orgName || `Đơn vị ${cleanOrg}`;
 
+      const finalPermissions = editRoleValue === 'admin' ? DEFAULT_ADMIN_PERMISSIONS : editPermissions;
+
       const updated: UserAccountRecord = {
         ...editingAccount,
         name: cleanName,
@@ -293,6 +448,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         orgId: cleanOrg,
         orgName,
         allowedTenants: editAllowedTenants.length > 0 ? editAllowedTenants : undefined,
+        permissions: finalPermissions,
         password: editPassValue.trim() ? editPassValue.trim() : editingAccount.password,
       };
 
@@ -337,8 +493,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setIsConfirmingClearLogs(false);
   };
 
+  // Current active workspace organization info
+  const currentTenant = tenants.find((t) => t.id === activeTenantId) || tenants[0];
+  const currentOrgCode = (currentTenant?.code || companySettings?.orgId || 'CT36').trim().toUpperCase();
+  const currentTenantId = (activeTenantId || currentTenant?.id || 'tenant_ct36').trim().toUpperCase();
+
+  // Filter accounts strictly belonging to the currently active branch
+  const branchAccounts = accounts.filter((acc) => {
+    const accOrg = (acc.orgId || 'CT36').trim().toUpperCase();
+    const allowed = (acc.allowedTenants || []).map((t) => t.trim().toUpperCase());
+    const createdTenant = (acc.createdTenantId || '').trim().toUpperCase();
+
+    return (
+      accOrg === currentOrgCode ||
+      accOrg === currentTenantId ||
+      allowed.includes(currentTenantId) ||
+      allowed.includes(currentOrgCode) ||
+      (createdTenant && createdTenant === currentTenantId)
+    );
+  });
+
   // Filter login logs
   const filteredLogs = loginHistory.filter((log) => {
+    // If not admin and not granted permission to view all logs, only show self logs
+    if (!isAdmin && !canViewAllActivityLogs) {
+      const isSelf =
+        log.username?.toLowerCase() === (currentUser?.username || '').toLowerCase() ||
+        log.name?.toLowerCase() === (currentUser?.name || '').toLowerCase();
+      if (!isSelf) return false;
+    }
+
     const matchSearch =
       !searchLoginQuery ||
       log.username.toLowerCase().includes(searchLoginQuery.toLowerCase()) ||
@@ -353,6 +537,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
     return matchSearch && matchStatus;
   });
+
+  // Pagination for login logs
+  const totalLoginPages = Math.max(1, Math.ceil(filteredLogs.length / logsPerPage));
+  const safeLoginPage = Math.min(Math.max(1, loginPage), totalLoginPages);
+  const paginatedLogs = filteredLogs.slice((safeLoginPage - 1) * logsPerPage, safeLoginPage * logsPerPage);
 
   // Sync state when prop updates
   useEffect(() => {
@@ -491,7 +680,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* MULTI-TENANT WORKSPACE CARD */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 text-white rounded-2xl p-6 shadow-md border border-slate-700/80 space-y-4">
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 text-white rounded-2xl p-6 shadow-md border border-slate-700/80">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shadow-inner flex-shrink-0">
@@ -500,58 +689,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-blue-300 font-mono bg-blue-500/20 px-2 py-0.5 rounded">
-                  Multi-Tenant Database
+                  Không Gian Làm Việc
                 </span>
                 <span className="text-xs text-slate-300">
-                  {tenants.length} Đơn vị trực thuộc
+                  Mã chi nhánh: <strong className="text-white font-mono">{tenants.find((t) => t.id === activeTenantId)?.code || companySettings.orgId}</strong>
                 </span>
               </div>
               <h3 className="text-base font-bold text-white mt-1">
-                Không Gian Làm Việc: {tenants.find((t) => t.id === activeTenantId)?.name || companySettings.orgName} ({tenants.find((t) => t.id === activeTenantId)?.code || companySettings.orgId})
+                {tenants.find((t) => t.id === activeTenantId)?.name || companySettings.orgName}
               </h3>
               <p className="text-xs text-slate-300 mt-0.5">
-                Toàn bộ dữ liệu Dự án, Kho vật tư, Chấm công và Lịch sử hoạt động được cô lập và đồng bộ độc lập cho từng chi nhánh
+                Toàn bộ dữ liệu Dự án, Kho vật tư, Chấm công và Lịch sử hoạt động được cô lập và đồng bộ độc lập cho chi nhánh này
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button
-              type="button"
-              id="settings-open-tenant-manager-btn"
-              onClick={onOpenTenantManager}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
-            >
-              <Building2 className="w-4 h-4" />
-              <span>Quản Lý Chi Nhánh / Đơn Vị</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Quick Branch Switcher Chips */}
-        <div className="pt-3 border-t border-slate-700/60 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400 font-medium mr-1">Chuyển nhanh không gian:</span>
-          {tenants.map((t) => {
-            const isCurrent = t.id === activeTenantId;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => {
-                  if (onSelectTenant) onSelectTenant(t.id);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  isCurrent
-                    ? 'bg-blue-500 text-white shadow-xs ring-2 ring-blue-300/40'
-                    : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
-                }`}
-              >
-                <span className="font-mono text-[10px] bg-black/30 px-1 py-0.2 rounded font-bold">{t.code}</span>
-                <span className="truncate max-w-[160px]">{t.brandName || t.name}</span>
-                {isCurrent && <Check className="w-3.5 h-3.5 text-blue-200" />}
-              </button>
-            );
-          })}
         </div>
       </div>
 
@@ -564,12 +715,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <ImageIcon className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Logo & Nhận Diện Thương Hiệu</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-900">Logo & Nhận Diện Thương Hiệu</h3>
+                  {!isAdmin && !canChangeBrandLogo && (
+                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-semibold flex items-center gap-1 border border-slate-200">
+                      <Lock className="w-3 h-3 text-slate-400" />
+                      <span>Chỉ xem</span>
+                    </span>
+                  )}
+                </div>
                 <p className="text-[11px] text-slate-500">Tải lên file logo tùy chỉnh để thay thế biểu trưng toàn hệ thống</p>
               </div>
             </div>
 
-            {logoPreview && (
+            {(isAdmin || canChangeBrandLogo) && logoPreview && (
               <button
                 type="button"
                 id="reset-logo-btn"
@@ -582,25 +741,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             )}
           </div>
 
+          {!isAdmin && !canChangeBrandLogo && (
+            <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span>
+                Bạn không có quyền <strong>Thay đổi logo thương hiệu</strong>. Vui lòng liên hệ Quản trị viên nếu cần tải logo mới.
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Upload Zone (7 cols) */}
             <div className="lg:col-span-7 space-y-3">
               <div
                 id="logo-dropzone"
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
-                  isDragging
-                    ? 'border-blue-500 bg-blue-50/80 ring-4 ring-blue-100'
-                    : 'border-slate-300 hover:border-blue-400 bg-slate-50/70 hover:bg-blue-50/30'
+                onDragOver={isAdmin || canChangeBrandLogo ? handleDragOver : undefined}
+                onDragLeave={isAdmin || canChangeBrandLogo ? handleDragLeave : undefined}
+                onDrop={isAdmin || canChangeBrandLogo ? handleDrop : undefined}
+                onClick={() => {
+                  if (isAdmin || canChangeBrandLogo) {
+                    fileInputRef.current?.click();
+                  }
+                }}
+                className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-all ${
+                  !isAdmin && !canChangeBrandLogo
+                    ? 'border-slate-200 bg-slate-50/50 cursor-not-allowed opacity-75'
+                    : isDragging
+                    ? 'border-blue-500 bg-blue-50/80 ring-4 ring-blue-100 cursor-pointer'
+                    : 'border-slate-300 hover:border-blue-400 bg-slate-50/70 hover:bg-blue-50/30 cursor-pointer'
                 }`}
               >
                 <input
                   ref={fileInputRef}
                   id="logo-file-input"
                   type="file"
+                  disabled={!isAdmin && !canChangeBrandLogo}
                   accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
                   onChange={handleFileInputChange}
                   className="hidden"
@@ -611,7 +786,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
 
                 <h4 className="text-xs font-bold text-slate-800 mb-1">
-                  Kéo thả file logo vào đây hoặc <span className="text-blue-600 underline">bấm để chọn file</span>
+                  {isAdmin || canChangeBrandLogo ? (
+                    <>
+                      Kéo thả file logo vào đây hoặc <span className="text-blue-600 underline">bấm để chọn file</span>
+                    </>
+                  ) : (
+                    <span className="text-slate-500">Chức năng tải logo bị khóa theo phân quyền người dùng</span>
+                  )}
                 </h4>
                 <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
                   Hỗ trợ các định dạng PNG, JPG, JPEG, SVG, WebP. Khuyến nghị ảnh nền trong suốt (PNG/SVG), tỉ lệ 1:1, tối đa 2.5MB.
@@ -701,20 +882,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <Building2 className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Thông Tin Doanh Nghiệp & Chi Nhánh</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-900">Thông Tin Doanh Nghiệp & Chi Nhánh</h3>
+                  {!isAdmin && !canEditCompanyInfo && (
+                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-semibold flex items-center gap-1 border border-slate-200">
+                      <Lock className="w-3 h-3 text-slate-400" />
+                      <span>Chỉ xem</span>
+                    </span>
+                  )}
+                </div>
                 <p className="text-[11px] text-slate-500">Chỉnh sửa thông tin doanh nghiệp hiển thị trên báo cáo, phiếu xuất và giao diện</p>
               </div>
             </div>
 
-            <button
-              type="button"
-              id="reset-form-default-btn"
-              onClick={handleResetAllToDefault}
-              className="text-xs text-slate-500 hover:text-blue-600 hover:underline font-medium cursor-pointer"
-            >
-              Khôi phục mặc định
-            </button>
+            {(isAdmin || canEditCompanyInfo) && (
+              <button
+                type="button"
+                id="reset-form-default-btn"
+                onClick={handleResetAllToDefault}
+                className="text-xs text-slate-500 hover:text-blue-600 hover:underline font-medium cursor-pointer"
+              >
+                Khôi phục mặc định
+              </button>
+            )}
           </div>
+
+          {!isAdmin && !canEditCompanyInfo && (
+            <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span>
+                Tài khoản của bạn đang ở chế độ <strong>Chỉ Xem</strong> thông tin doanh nghiệp. Chỉ Quản trị viên hoặc tài khoản có quyền <strong>Thay đổi TT Doanh Nghiệp</strong> mới được phép lưu chỉnh sửa.
+              </span>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Field 1: Mã Doanh Nghiệp */}
@@ -727,10 +927,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   id="settings-orgid-input"
                   type="text"
                   required
+                  disabled={!isAdmin && !canEditCompanyInfo}
                   value={formData.orgId}
                   onChange={(e) => setFormData({ ...formData, orgId: e.target.value.toUpperCase() })}
                   placeholder="CT36"
-                  className="w-full px-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 uppercase outline-none"
+                  className="w-full px-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 uppercase outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
               <p className="text-[10px] text-slate-400">Dùng để phân biệt dữ liệu và mã đăng nhập đơn vị</p>
@@ -746,10 +947,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   id="settings-orgname-input"
                   type="text"
                   required
+                  disabled={!isAdmin && !canEditCompanyInfo}
                   value={formData.orgName}
                   onChange={(e) => setFormData({ ...formData, orgName: e.target.value })}
                   placeholder="Công Ty Trường Sơn - Waterproofing 36"
-                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none"
+                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
               <p className="text-[10px] text-slate-400">Tên pháp nhân hiển thị trên tiêu đề hệ thống và phiếu xuất kho</p>
@@ -764,10 +966,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <input
                   id="settings-brandname-input"
                   type="text"
+                  disabled={!isAdmin && !canEditCompanyInfo}
                   value={formData.brandName}
                   onChange={(e) => setFormData({ ...formData, brandName: e.target.value })}
                   placeholder="Trường Sơn Co."
-                  className="w-full px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none"
+                  className="w-full px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -782,10 +985,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <input
                   id="settings-phone-input"
                   type="text"
+                  disabled={!isAdmin && !canEditCompanyInfo}
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   placeholder="0915 586 234"
-                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none"
+                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -800,10 +1004,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <input
                   id="settings-email-input"
                   type="email"
+                  disabled={!isAdmin && !canEditCompanyInfo}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="contact@chongtham36.vn"
-                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none"
+                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -818,10 +1023,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <input
                   id="settings-address-input"
                   type="text"
+                  disabled={!isAdmin && !canEditCompanyInfo}
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   placeholder="Số 36 Đại Lộ Lê Lợi, TP. Thanh Hóa"
-                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none"
+                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -836,10 +1042,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <input
                   id="settings-taxcode-input"
                   type="text"
+                  disabled={!isAdmin && !canEditCompanyInfo}
                   value={formData.taxCode}
                   onChange={(e) => setFormData({ ...formData, taxCode: e.target.value })}
                   placeholder="2801987654"
-                  className="w-full px-3.5 py-2.5 text-xs font-mono font-medium text-slate-800 outline-none"
+                  className="w-full px-3.5 py-2.5 text-xs font-mono font-medium text-slate-800 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -853,10 +1060,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <input
                   id="settings-tagline-input"
                   type="text"
+                  disabled={!isAdmin && !canEditCompanyInfo}
                   value={formData.tagline}
                   onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
                   placeholder="Hệ thống Quản lý Thi công & Vật tư Chống thấm"
-                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none"
+                  className="w-full px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -867,8 +1075,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <button
               type="submit"
               id="save-company-settings-btn"
-              disabled={isSaving}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#0c59be] hover:bg-[#094ca7] text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-[0.99] disabled:opacity-60 cursor-pointer"
+              disabled={isSaving || (!isAdmin && !canEditCompanyInfo)}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#0c59be] hover:bg-[#094ca7] text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSaving ? (
                 <>
@@ -886,14 +1094,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </form>
 
-      {/* SECTION 3: USER PROFILE & FIREBASE CLOUD */}
+      {/* SECTION 3: USER PROFILE & GRANULAR PERMISSIONS OVERVIEW */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-xs space-y-6">
         {/* User profile & Active Role */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
               <Shield className="w-4 h-4 text-blue-600" />
-              <span>Tài khoản & Phân quyền đang hoạt động</span>
+              <span>Tài khoản & Quyền Hạn Đang Hoạt Động</span>
             </h3>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 uppercase">
               {currentUser?.role === 'admin'
@@ -931,6 +1139,62 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 value={currentUser?.orgId || 'CT36'}
                 className="w-full px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 uppercase"
               />
+            </div>
+          </div>
+
+          {/* Active Granular Permissions Breakdown */}
+          <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-blue-600" />
+                <span>Chi Tiết 6 Quyền Hạn Của Bạn Trong Hệ Thống</span>
+              </h4>
+              <span className="text-[11px] text-slate-500">
+                {isAdmin ? '👑 Quyền Quản trị viên (Toàn quyền)' : 'Cấp quyền theo cấu hình từ Admin'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {PERMISSION_ITEMS.map((item) => {
+                const isGranted = isAdmin || hasUserPermission(currentUser, item.key);
+                const ItemIcon = item.icon;
+
+                return (
+                  <div
+                    key={item.key}
+                    className={`p-2.5 rounded-xl border text-xs flex items-start gap-2 transition-all ${
+                      isGranted
+                        ? 'bg-white border-emerald-200 text-slate-800 shadow-2xs'
+                        : 'bg-slate-100/70 border-slate-200 text-slate-400 opacity-80'
+                    }`}
+                  >
+                    <div
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        isGranted ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'
+                      }`}
+                    >
+                      <ItemIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className={`font-bold text-xs truncate ${isGranted ? 'text-slate-800' : 'text-slate-500'}`}>
+                          {item.label}
+                        </span>
+                        {isGranted ? (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 flex-shrink-0">
+                            Cho phép
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-medium text-slate-400 bg-slate-200 px-1.5 py-0.2 rounded flex-shrink-0">
+                            Khóa
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-2">{item.description}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -1011,12 +1275,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div>
                 <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-blue-600" />
-                  <span>Quản Lý Tài Khoản Hệ Thống ({accounts.length})</span>
+                  <span>Quản Lý Tài Khoản Chi Nhánh ({branchAccounts.length})</span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
                   {isAdmin
-                    ? '👑 Bạn đang đăng nhập với quyền Admin: Có toàn quyền Sửa thông tin, phân quyền và Xóa các tài khoản người dùng khác.'
-                    : 'Tài khoản được lưu đồng bộ thời gian thực trên Firebase Realtime Database'}
+                    ? `👑 Admin: Quản lý tài khoản thuộc chi nhánh ${currentTenant?.brandName || currentTenant?.name || currentOrgCode} (Sửa thông tin, phân 6 quyền chi tiết và Xóa tài khoản).`
+                    : `Chỉ hiển thị các tài khoản thuộc chi nhánh ${currentTenant?.brandName || currentTenant?.name || currentOrgCode} (Đồng bộ Realtime Database)`}
                 </p>
               </div>
 
@@ -1033,217 +1297,265 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               )}
             </div>
 
-            {/* Account Search & Filter Bar */}
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchAccountQuery}
-                  onChange={(e) => setSearchAccountQuery(e.target.value)}
-                  placeholder="Tìm theo tên, username, SĐT, email hoặc đơn vị..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-600"
-                />
-                {searchAccountQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchAccountQuery('')}
-                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+            {!isAdmin && !canViewUserList ? (
+              <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center space-y-2">
+                <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center mx-auto">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <h5 className="text-xs font-bold text-slate-800">Danh Sách User Bị Khóa</h5>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Tài khoản của bạn không được cấp quyền <strong>Xem danh sách user</strong>. Vui lòng liên hệ Quản trị viên để được cấp quyền truy cập.
+                </p>
               </div>
+            ) : (
+              <>
+                {/* Account Search & Filter Bar */}
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={searchAccountQuery}
+                      onChange={(e) => setSearchAccountQuery(e.target.value)}
+                      placeholder="Tìm theo tên, username, SĐT, email hoặc chức vụ..."
+                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-600"
+                    />
+                    {searchAccountQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchAccountQuery('')}
+                        className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
 
-              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs">
-                <button
-                  type="button"
-                  onClick={() => setFilterAccountRole('all')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                    filterAccountRole === 'all'
-                      ? 'bg-white text-slate-800 shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Tất cả ({accounts.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterAccountRole('admin')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                    filterAccountRole === 'admin'
-                      ? 'bg-white text-amber-700 shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  👑 Admin ({accounts.filter((a) => a.role === 'admin').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterAccountRole('storekeeper')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                    filterAccountRole === 'storekeeper'
-                      ? 'bg-white text-emerald-700 shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  📦 Thủ Kho ({accounts.filter((a) => a.role === 'storekeeper').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterAccountRole('supervisor')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                    filterAccountRole === 'supervisor'
-                      ? 'bg-white text-blue-700 shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  👷 Giám Sát ({accounts.filter((a) => a.role === 'supervisor').length})
-                </button>
-              </div>
-            </div>
-
-            {/* Accounts Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {accounts
-                .filter((acc) => {
-                  const matchSearch =
-                    !searchAccountQuery ||
-                    acc.name?.toLowerCase().includes(searchAccountQuery.toLowerCase()) ||
-                    acc.username?.toLowerCase().includes(searchAccountQuery.toLowerCase()) ||
-                    (acc.phone && acc.phone.includes(searchAccountQuery)) ||
-                    (acc.email && acc.email.toLowerCase().includes(searchAccountQuery.toLowerCase())) ||
-                    (acc.orgId && acc.orgId.toLowerCase().includes(searchAccountQuery.toLowerCase())) ||
-                    (acc.orgName && acc.orgName.toLowerCase().includes(searchAccountQuery.toLowerCase()));
-
-                  const matchRole = filterAccountRole === 'all' || acc.role === filterAccountRole;
-                  return matchSearch && matchRole;
-                })
-                .map((acc) => {
-                  const isCurrentLoggedUser =
-                    acc.username.toLowerCase() === (currentUser?.username || '').toLowerCase();
-
-                  return (
-                    <div
-                      key={acc.username}
-                      className={`p-3.5 bg-slate-50/90 rounded-xl border text-xs flex flex-col justify-between hover:border-slate-300 transition-all shadow-2xs ${
-                        isCurrentLoggedUser
-                          ? 'border-blue-300 bg-blue-50/30 ring-1 ring-blue-100'
-                          : 'border-slate-200/90'
+                  <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setFilterAccountRole('all')}
+                      className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                        filterAccountRole === 'all'
+                          ? 'bg-white text-slate-800 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-700'
                       }`}
                     >
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div
-                              className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                                acc.role === 'admin'
-                                  ? 'bg-amber-100 text-amber-800'
+                      Tất cả ({branchAccounts.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterAccountRole('admin')}
+                      className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                        filterAccountRole === 'admin'
+                          ? 'bg-white text-amber-700 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      👑 Admin ({branchAccounts.filter((a) => a.role === 'admin').length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterAccountRole('storekeeper')}
+                      className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                        filterAccountRole === 'storekeeper'
+                          ? 'bg-white text-emerald-700 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      📦 Thủ Kho ({branchAccounts.filter((a) => a.role === 'storekeeper').length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterAccountRole('supervisor')}
+                      className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                        filterAccountRole === 'supervisor'
+                          ? 'bg-white text-blue-700 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      👷 Giám Sát ({branchAccounts.filter((a) => a.role === 'supervisor').length})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Accounts Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {branchAccounts
+                    .filter((acc) => {
+                      const matchSearch =
+                        !searchAccountQuery ||
+                        acc.name?.toLowerCase().includes(searchAccountQuery.toLowerCase()) ||
+                        acc.username?.toLowerCase().includes(searchAccountQuery.toLowerCase()) ||
+                        (acc.phone && acc.phone.includes(searchAccountQuery)) ||
+                        (acc.email && acc.email.toLowerCase().includes(searchAccountQuery.toLowerCase())) ||
+                        (acc.orgId && acc.orgId.toLowerCase().includes(searchAccountQuery.toLowerCase())) ||
+                        (acc.orgName && acc.orgName.toLowerCase().includes(searchAccountQuery.toLowerCase()));
+
+                      const matchRole = filterAccountRole === 'all' || acc.role === filterAccountRole;
+                      return matchSearch && matchRole;
+                    })
+                    .map((acc) => {
+                      const isCurrentLoggedUser =
+                        acc.username.toLowerCase() === (currentUser?.username || '').toLowerCase();
+                      const accIsAdmin = acc.role === 'admin' || acc.username.toLowerCase() === 'admin';
+
+                      return (
+                        <div
+                          key={acc.username}
+                          className={`p-3.5 bg-slate-50/90 rounded-xl border text-xs flex flex-col justify-between hover:border-slate-300 transition-all shadow-2xs ${
+                            isCurrentLoggedUser
+                              ? 'border-blue-300 bg-blue-50/30 ring-1 ring-blue-100'
+                              : 'border-slate-200/90'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 ${
+                                    acc.role === 'admin'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : acc.role === 'storekeeper'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}
+                                >
+                                  {acc.name ? acc.name.charAt(0).toUpperCase() : 'U'}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="font-bold text-slate-900 truncate text-xs block" title={acc.name}>
+                                    {acc.name}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">@{acc.username}</span>
+                                </div>
+                              </div>
+
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex-shrink-0 ${
+                                  acc.role === 'admin'
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    : acc.role === 'storekeeper'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : 'bg-blue-100 text-blue-800 border border-blue-200'
+                                }`}
+                              >
+                                {acc.role === 'admin'
+                                  ? '👑 Admin'
                                   : acc.role === 'storekeeper'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-blue-100 text-blue-800'
-                              }`}
-                            >
-                              {acc.name ? acc.name.charAt(0).toUpperCase() : 'U'}
-                            </div>
-                            <div className="min-w-0">
-                              <span className="font-bold text-slate-900 truncate text-xs block" title={acc.name}>
-                                {acc.name}
+                                  ? '📦 Thủ Kho'
+                                  : '👷 Giám Sát'}
                               </span>
-                              <span className="text-[10px] text-slate-400 font-mono">@{acc.username}</span>
+                            </div>
+
+                            <div className="space-y-1 text-slate-600 bg-white/70 p-2 rounded-lg border border-slate-100">
+                              {acc.phone && (
+                                <div className="text-[11px] text-slate-600 flex items-center gap-1.5">
+                                  <Phone className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                                  <span className="font-medium text-slate-700">{acc.phone}</span>
+                                </div>
+                              )}
+                              {acc.email && (
+                                <div className="text-[11px] text-slate-600 flex items-center gap-1.5 truncate">
+                                  <Mail className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                                  <span className="text-slate-600 truncate">{acc.email}</span>
+                                </div>
+                              )}
+                              <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5">
+                                <span>Chi nhánh: <strong className="text-slate-700 font-mono">{acc.orgId || 'CT36'}</strong></span>
+                                {acc.createdAt && (
+                                  <span className="text-slate-400">Tạo: {acc.createdAt}</span>
+                                )}
+                              </div>
+                              {acc.lastLoginAt && (
+                                <div className="text-[10px] text-slate-500 pt-0.5 border-t border-slate-100">
+                                  Đăng nhập: <span className="font-medium text-slate-600">{acc.lastLoginAt}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Granular Permission Badges */}
+                            <div className="mt-2 pt-1.5 border-t border-slate-200/60">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                Quyền hạn chi tiết:
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {accIsAdmin ? (
+                                  <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200 font-semibold">
+                                    👑 Toàn quyền hệ thống
+                                  </span>
+                                ) : (
+                                  PERMISSION_ITEMS.map((item) => {
+                                    const hasPerm = hasUserPermission(acc as any, item.key);
+                                    if (!hasPerm) return null;
+                                    return (
+                                      <span
+                                        key={item.key}
+                                        className="text-[9px] px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-100 font-medium"
+                                        title={item.description}
+                                      >
+                                        ✓ {item.badge}
+                                      </span>
+                                    );
+                                  })
+                                )}
+                              </div>
                             </div>
                           </div>
 
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex-shrink-0 ${
-                              acc.role === 'admin'
-                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                : acc.role === 'storekeeper'
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                : 'bg-blue-100 text-blue-800 border border-blue-200'
-                            }`}
-                          >
-                            {acc.role === 'admin'
-                              ? '👑 Admin'
-                              : acc.role === 'storekeeper'
-                              ? '📦 Thủ Kho'
-                              : '👷 Giám Sát'}
-                          </span>
-                        </div>
-
-                        <div className="space-y-1 text-slate-600 bg-white/70 p-2 rounded-lg border border-slate-100">
-                          {acc.phone && (
-                            <div className="text-[11px] text-slate-600 flex items-center gap-1.5">
-                              <Phone className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                              <span className="font-medium text-slate-700">{acc.phone}</span>
-                            </div>
-                          )}
-                          {acc.email && (
-                            <div className="text-[11px] text-slate-600 flex items-center gap-1.5 truncate">
-                              <Mail className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                              <span className="text-slate-600 truncate">{acc.email}</span>
-                            </div>
-                          )}
-                          <div className="text-[10px] text-slate-500 flex items-center justify-between pt-0.5">
-                            <span>Đơn vị: <strong className="text-slate-700">{acc.orgId || 'CT36'}</strong></span>
-                            {acc.createdAt && (
-                              <span className="text-slate-400">Tạo: {acc.createdAt}</span>
+                          <div className="mt-3 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
+                            {isCurrentLoggedUser ? (
+                              <span className="text-[10px] font-semibold text-blue-600 bg-blue-100/80 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <UserCheck className="w-3 h-3" />
+                                <span>Bạn đang đăng nhập</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[10px]">
+                                {acc.allowedTenants && acc.allowedTenants.length > 1
+                                  ? `Truy cập: ${acc.allowedTenants.length} chi nhánh`
+                                  : `Chi nhánh: ${acc.orgId || 'CT36'}`}
+                              </span>
                             )}
-                          </div>
-                          {acc.lastLoginAt && (
-                            <div className="text-[10px] text-slate-500 pt-0.5 border-t border-slate-100">
-                              Đăng nhập: <span className="font-medium text-slate-600">{acc.lastLoginAt}</span>
+
+                            <div className="flex items-center gap-1">
+                              {/* Nút Sửa: Admin có quyền sửa tất cả user */}
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditAccount(acc)}
+                                  className="px-2 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                  title={`Sửa thông tin, mật khẩu & quyền tài khoản ${acc.username}`}
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  <span>Phân quyền</span>
+                                </button>
+                              )}
+
+                              {/* Nút Xóa: Admin có quyền xóa tất cả các user khác (ngoại trừ tài khoản đang đăng nhập) */}
+                              {isAdmin && onDeleteAccount && !isCurrentLoggedUser && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDeleteAccount(acc)}
+                                  className="px-2 py-1 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                  title={`Xóa vĩnh viễn tài khoản ${acc.username}`}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Xóa</span>
+                                </button>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="mt-3 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
-                        {isCurrentLoggedUser ? (
-                          <span className="text-[10px] font-semibold text-blue-600 bg-blue-100/80 px-2 py-0.5 rounded-md flex items-center gap-1">
-                            <UserCheck className="w-3 h-3" />
-                            <span>Bạn đang đăng nhập</span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-[10px]">
-                            {acc.allowedTenants && acc.allowedTenants.length > 1
-                              ? `Truy cập: ${acc.allowedTenants.length} chi nhánh`
-                              : `Chi nhánh: ${acc.orgId || 'CT36'}`}
-                          </span>
-                        )}
-
-                        <div className="flex items-center gap-1">
-                          {/* Nút Sửa: Admin có quyền sửa tất cả user */}
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditAccount(acc)}
-                              className="px-2 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                              title={`Sửa thông tin, mật khẩu & quyền tài khoản ${acc.username}`}
-                            >
-                              <Edit2 className="w-3 h-3" />
-                              <span>Sửa</span>
-                            </button>
-                          )}
-
-                          {/* Nút Xóa: Admin có quyền xóa tất cả các user khác (ngoại trừ tài khoản đang đăng nhập) */}
-                          {isAdmin && onDeleteAccount && !isCurrentLoggedUser && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenDeleteAccount(acc)}
-                              className="px-2 py-1 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                              title={`Xóa vĩnh viễn tài khoản ${acc.username}`}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                              <span>Xóa</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                      );
+                    })}
+                  {branchAccounts.length === 0 && (
+                    <div className="col-span-full p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs">
+                      Không tìm thấy tài khoản nào thuộc chi nhánh {currentTenant?.brandName || currentTenant?.name || currentOrgCode}.
                     </div>
-                  );
-                })}
-            </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* REALTIME LOGIN AUDIT LOGS SECTION */}
@@ -1252,10 +1564,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div>
                 <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                   <History className="w-4 h-4 text-emerald-600" />
-                  <span>Nhật Ký & Lịch Sử Đăng Nhập Realtime Database ({loginHistory.length})</span>
+                  <span>Nhật Ký & Lịch Sử Đăng Nhập Realtime Database ({filteredLogs.length})</span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  Tất cả các phiên đăng nhập được lưu tự động lên cơ sở dữ liệu để theo dõi an ninh
+                  Lưu trữ tự động trên cơ sở dữ liệu thời gian thực • Hiển thị 10 bản ghi mới nhất theo trang
                 </p>
               </div>
 
@@ -1366,7 +1678,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {filteredLogs.length === 0 ? (
+                  {paginatedLogs.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
                         {loginHistory.length === 0
@@ -1375,7 +1687,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    filteredLogs.map((log) => (
+                    paginatedLogs.map((log) => (
                       <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
                           {log.timeFormatted || new Date(log.timestamp).toLocaleString('vi-VN')}
@@ -1431,6 +1743,106 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls Bar */}
+            {filteredLogs.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                <div className="text-slate-600 font-medium flex items-center gap-2">
+                  <span>
+                    Hiển thị <strong className="text-slate-900 font-mono">{(safeLoginPage - 1) * logsPerPage + 1}</strong> - <strong className="text-slate-900 font-mono">{Math.min(safeLoginPage * logsPerPage, filteredLogs.length)}</strong> trên tổng số <strong className="text-slate-900 font-mono">{filteredLogs.length}</strong> bản ghi
+                  </span>
+                  <span className="text-slate-400 text-[10px] bg-slate-200/80 px-1.5 py-0.5 rounded">
+                    {logsPerPage} bản ghi/trang
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 ml-auto">
+                  {/* Page Jump Selector */}
+                  <div className="flex items-center gap-1 mr-2 text-slate-500">
+                    <span className="text-[11px]">Trang:</span>
+                    <select
+                      value={safeLoginPage}
+                      onChange={(e) => setLoginPage(Number(e.target.value))}
+                      className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-semibold text-slate-700 outline-none cursor-pointer"
+                    >
+                      {Array.from({ length: totalLoginPages }, (_, i) => i + 1).map((p) => (
+                        <option key={p} value={p}>
+                          {p} / {totalLoginPages}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Navigation Buttons */}
+                  <button
+                    type="button"
+                    onClick={() => setLoginPage(1)}
+                    disabled={safeLoginPage === 1}
+                    className="p-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white text-slate-600 border border-slate-200 rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed"
+                    title="Trang đầu tiên"
+                  >
+                    <ChevronsLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLoginPage((prev) => Math.max(1, prev - 1))}
+                    disabled={safeLoginPage === 1}
+                    className="px-2 py-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white text-slate-600 border border-slate-200 rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1 font-medium"
+                    title="Trang trước"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Trước</span>
+                  </button>
+
+                  {/* Page Pills */}
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalLoginPages }, (_, i) => i + 1)
+                      .filter((p) => p === 1 || p === totalLoginPages || Math.abs(p - safeLoginPage) <= 1)
+                      .map((p, idx, arr) => {
+                        const showEllipsisBefore = idx > 0 && p - arr[idx - 1] > 1;
+                        return (
+                          <React.Fragment key={p}>
+                            {showEllipsisBefore && <span className="text-slate-400 px-1 text-[10px]">...</span>}
+                            <button
+                              type="button"
+                              onClick={() => setLoginPage(p)}
+                              className={`w-7 h-7 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                                safeLoginPage === p
+                                  ? 'bg-blue-600 text-white shadow-2xs'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setLoginPage((prev) => Math.min(totalLoginPages, prev + 1))}
+                    disabled={safeLoginPage === totalLoginPages}
+                    className="px-2 py-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white text-slate-600 border border-slate-200 rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1 font-medium"
+                    title="Trang tiếp"
+                  >
+                    <span>Sau</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLoginPage(totalLoginPages)}
+                    disabled={safeLoginPage === totalLoginPages}
+                    className="p-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white text-slate-600 border border-slate-200 rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed"
+                    title="Trang cuối cùng"
+                  >
+                    <ChevronsRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1502,7 +1914,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Phân quyền vai trò</label>
                     <select
                       value={addRole}
-                      onChange={(e) => setAddRole(e.target.value as any)}
+                      onChange={(e) => {
+                        const newRole = e.target.value as 'admin' | 'storekeeper' | 'supervisor';
+                        setAddRole(newRole);
+                        if (newRole === 'admin') {
+                          handleApplyPreset('full', setAddPermissions);
+                        } else if (newRole === 'storekeeper') {
+                          handleApplyPreset('storekeeper', setAddPermissions);
+                        } else {
+                          handleApplyPreset('supervisor', setAddPermissions);
+                        }
+                      }}
                       className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-semibold cursor-pointer"
                     >
                       <option value="admin">👑 Quản Trị Viên (Admin)</option>
@@ -1531,6 +1953,71 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     placeholder="VD: 0915 123 456"
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600"
                   />
+                </div>
+
+                {/* Granular Permission Checklist for New User */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Cấu hình 6 Quyền Hạn Chi Tiết</span>
+                    </label>
+                    <div className="flex items-center gap-1 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => handleApplyPreset('full', setAddPermissions)}
+                        className="text-blue-600 hover:text-blue-800 underline font-medium cursor-pointer"
+                      >
+                        Toàn quyền
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyPreset('none', setAddPermissions)}
+                        className="text-slate-500 hover:text-slate-700 underline font-medium cursor-pointer"
+                      >
+                        Bỏ hết
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {PERMISSION_ITEMS.map((item) => {
+                      const isChecked = addRole === 'admin' || !!addPermissions[item.key];
+                      const ItemIcon = item.icon;
+
+                      return (
+                        <label
+                          key={item.key}
+                          className={`flex items-start gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-blue-50/80 border-blue-200 text-blue-900 font-medium'
+                              : 'bg-white border-slate-200 text-slate-600'
+                          } ${addRole === 'admin' ? 'opacity-80 cursor-not-allowed' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={addRole === 'admin'}
+                            checked={isChecked}
+                            onChange={(e) => {
+                              setAddPermissions({
+                                ...addPermissions,
+                                [item.key]: e.target.checked,
+                              });
+                            }}
+                            className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 mt-0.5"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1">
+                              <ItemIcon className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                              <span className="font-semibold text-[11px] truncate">{item.label}</span>
+                            </div>
+                            <p className="text-[9px] text-slate-400 leading-tight mt-0.5 line-clamp-1">{item.description}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -1643,7 +2130,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Phân quyền vai trò</label>
                     <select
                       value={editRoleValue}
-                      onChange={(e) => setEditRoleValue(e.target.value as any)}
+                      onChange={(e) => {
+                        const newRole = e.target.value as 'admin' | 'storekeeper' | 'supervisor';
+                        setEditRoleValue(newRole);
+                        if (newRole === 'admin') {
+                          handleApplyPreset('full', setEditPermissions);
+                        } else if (newRole === 'storekeeper') {
+                          handleApplyPreset('storekeeper', setEditPermissions);
+                        } else {
+                          handleApplyPreset('supervisor', setEditPermissions);
+                        }
+                      }}
                       className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-600 font-semibold cursor-pointer"
                     >
                       <option value="admin">👑 Quản Trị Viên (Admin)</option>
@@ -1771,6 +2268,71 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Granular Permission Checklist for Editing User */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Cấu hình 6 Quyền Hạn Chi Tiết Cho Tài Khoản</span>
+                    </label>
+                    <div className="flex items-center gap-1 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => handleApplyPreset('full', setEditPermissions)}
+                        className="text-blue-600 hover:text-blue-800 underline font-medium cursor-pointer"
+                      >
+                        Toàn quyền
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyPreset('none', setEditPermissions)}
+                        className="text-slate-500 hover:text-slate-700 underline font-medium cursor-pointer"
+                      >
+                        Bỏ hết
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {PERMISSION_ITEMS.map((item) => {
+                      const isChecked = editRoleValue === 'admin' || !!editPermissions[item.key];
+                      const ItemIcon = item.icon;
+
+                      return (
+                        <label
+                          key={item.key}
+                          className={`flex items-start gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-blue-50/80 border-blue-200 text-blue-900 font-medium'
+                              : 'bg-white border-slate-200 text-slate-600'
+                          } ${editRoleValue === 'admin' ? 'opacity-80 cursor-not-allowed' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={editRoleValue === 'admin'}
+                            checked={isChecked}
+                            onChange={(e) => {
+                              setEditPermissions({
+                                ...editPermissions,
+                                [item.key]: e.target.checked,
+                              });
+                            }}
+                            className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 mt-0.5"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1">
+                              <ItemIcon className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                              <span className="font-semibold text-[11px] truncate">{item.label}</span>
+                            </div>
+                            <p className="text-[9px] text-slate-400 leading-tight mt-0.5 line-clamp-1">{item.description}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                   <button

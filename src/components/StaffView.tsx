@@ -16,31 +16,44 @@ import {
   Calendar,
   Clock,
   ArrowUpRight,
+  CalendarDays,
+  FileSpreadsheet,
+  Plus,
 } from 'lucide-react';
-import { ConstructionProject, LaborDailyLog, StaffMember } from '../types';
+import { ConstructionProject, LaborDailyLog, StaffMember, CompanySettings, UserAccount } from '../types';
 import { StaffAttendanceDetailModal } from './StaffAttendanceDetailModal';
+import { TimesheetView } from './TimesheetView';
 
 interface StaffViewProps {
   staff: StaffMember[];
   laborLogs?: LaborDailyLog[];
   projects?: ConstructionProject[];
+  companySettings?: CompanySettings;
+  currentUser?: UserAccount | null;
   onAddStaff: (newStaff: StaffMember) => Promise<void> | void;
   onDeleteStaff?: (id: string) => Promise<void> | void;
   onUpdateLaborLog?: (log: LaborDailyLog) => Promise<void> | void;
   onDeleteLaborLog?: (logId: string) => Promise<void> | void;
   onAddLaborLog?: (log: LaborDailyLog) => Promise<void> | void;
+  onOpenNewLaborLog?: () => void;
 }
 
 export const StaffView: React.FC<StaffViewProps> = ({
   staff,
   laborLogs = [],
   projects = [],
+  companySettings,
+  currentUser,
   onAddStaff,
   onDeleteStaff,
   onUpdateLaborLog,
   onDeleteLaborLog,
   onAddLaborLog,
+  onOpenNewLaborLog,
 }) => {
+  // Active sub-tab inside Personnel module: 'staff_list' (Hồ sơ nhân sự) or 'timesheet' (Bảng chấm công tổng hợp)
+  const [activeTab, setActiveTab] = useState<'staff_list' | 'timesheet'>('staff_list');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -183,31 +196,82 @@ export const StaffView: React.FC<StaffViewProps> = ({
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto pb-10">
-      {/* Header & Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+      {/* Header & Module Tab Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <div className="flex items-center gap-2.5">
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              Đội Ngũ Nhân Sự & Thợ Thi Công
+              Quản Lý Nhân Sự & Bảng Chấm Công
             </h2>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 font-mono">
               {staff.length} Nhân Sự
             </span>
           </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Quản lý danh sách thợ thi công, kỹ sư và bảng chấm công tổng hợp từ nhật ký hàng ngày
+          </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0c59be] hover:bg-[#094ca7] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Thêm nhân sự mới</span>
-        </button>
+        {/* Action Button & Sub-Tab Switcher */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Sub-tab Switcher */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setActiveTab('staff_list')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'staff_list'
+                  ? 'bg-white text-blue-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Hồ Sơ Nhân Sự ({staff.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('timesheet')}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'timesheet'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CalendarDays className="w-4 h-4" />
+              <span>Bảng Chấm Công</span>
+            </button>
+          </div>
+
+          {/* Quick Action Button based on active subtab */}
+          {activeTab === 'staff_list' ? (
+            <button
+              type="button"
+              onClick={handleOpenAddModal}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#0c59be] hover:bg-[#094ca7] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Thêm nhân sự</span>
+            </button>
+          ) : (
+            onOpenNewLaborLog && (
+              <button
+                type="button"
+                onClick={onOpenNewLaborLog}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Chấm công mới</span>
+              </button>
+            )
+          )}
+        </div>
       </div>
 
-      {/* KPI Overview Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+      {/* SUB-VIEW 1: STAFF PROFILES & CARDS */}
+      {activeTab === 'staff_list' && (
+        <>
+          {/* KPI Overview Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 font-medium">Tổng nhân sự</span>
@@ -491,6 +555,21 @@ export const StaffView: React.FC<StaffViewProps> = ({
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {/* SUB-VIEW 2: TIMESHEET BOARD (BẢNG CHẤM CÔNG TỔNG HỢP REALTIME) */}
+      {activeTab === 'timesheet' && (
+        <TimesheetView
+          staff={staff}
+          laborLogs={laborLogs}
+          projects={projects}
+          companySettings={companySettings}
+          currentUser={currentUser}
+          onOpenStaffDetail={(s) => setSelectedStaffForAttendance(s)}
+          onOpenNewLaborLog={onOpenNewLaborLog}
+        />
+      )}
 
       {/* Modal Add / Edit Staff */}
       {isModalOpen && (

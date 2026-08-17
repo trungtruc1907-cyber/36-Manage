@@ -18,7 +18,7 @@ import {
   ExternalLink,
   ChevronRight,
 } from 'lucide-react';
-import { ActivityLog, ActivityCategory, UserAccount } from '../types';
+import { ActivityLog, ActivityCategory, UserAccount, hasUserPermission } from '../types';
 
 interface ActivityLogsModalProps {
   isOpen: boolean;
@@ -39,6 +39,9 @@ export const ActivityLogsModal: React.FC<ActivityLogsModalProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<ActivityCategory>('all');
   const [isClearing, setIsClearing] = useState(false);
 
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.username?.toLowerCase() === 'admin';
+  const canViewAllActivityLogs = hasUserPermission(currentUser, 'canViewAllActivityLogs');
+
   // Time format helper for relative display
   const getRelativeTime = (timestamp: number) => {
     if (!timestamp) return '';
@@ -52,9 +55,22 @@ export const ActivityLogsModal: React.FC<ActivityLogsModalProps> = ({
     return `${Math.floor(diff / 86400)} ngày trước`;
   };
 
+  // Filter logs visible to this user
+  const visibleLogs = useMemo(() => {
+    if (isAdmin || canViewAllActivityLogs) {
+      return logs;
+    }
+    const currentUsername = (currentUser?.username || '').toLowerCase();
+    const currentName = (currentUser?.name || '').toLowerCase();
+    return logs.filter((log) => {
+      const user = (log.userName || '').toLowerCase();
+      return user === currentUsername || user === currentName;
+    });
+  }, [logs, isAdmin, canViewAllActivityLogs, currentUser]);
+
   // Filter logs
   const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
+    return visibleLogs.filter((log) => {
       const matchCategory =
         selectedCategory === 'all' ? true : log.category === selectedCategory;
 
@@ -69,12 +85,12 @@ export const ActivityLogsModal: React.FC<ActivityLogsModalProps> = ({
 
       return matchCategory && matchSearch;
     });
-  }, [logs, selectedCategory, searchTerm]);
+  }, [visibleLogs, selectedCategory, searchTerm]);
 
   // Category stats
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {
-      all: logs.length,
+      all: visibleLogs.length,
       project: 0,
       export: 0,
       labor: 0,
@@ -83,13 +99,13 @@ export const ActivityLogsModal: React.FC<ActivityLogsModalProps> = ({
       auth: 0,
       settings: 0,
     };
-    logs.forEach((log) => {
+    visibleLogs.forEach((log) => {
       if (counts[log.category] !== undefined) {
         counts[log.category]++;
       }
     });
     return counts;
-  }, [logs]);
+  }, [visibleLogs]);
 
   const handleClear = async () => {
     if (!onClearLogs) return;
