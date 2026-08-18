@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Building2,
   Plus,
@@ -21,9 +21,84 @@ import {
   Printer,
   FileSpreadsheet,
   Lock,
+  ArrowUpDown,
+  Sparkles,
 } from 'lucide-react';
 import { ConstructionProject, ExportedGood, LaborDailyLog, StaffMember, CompanySettings, UserAccount, hasUserPermission } from '../types';
 import { exportProjectToExcel, printProjectReport } from '../utils/projectExportUtils';
+
+// Helper function to extract exact creation timestamp for consistent sorting
+export function getProjectCreationTimestamp(p: ConstructionProject): number {
+  if (typeof p.createdAtTimestamp === 'number' && !isNaN(p.createdAtTimestamp)) {
+    return p.createdAtTimestamp;
+  }
+  if (p.createdAt) {
+    if (typeof p.createdAt === 'number') return p.createdAt;
+    const parsed = Date.parse(p.createdAt);
+    if (!isNaN(parsed)) return parsed;
+    // Format DD/MM/YYYY or DD/MM/YYYY HH:mm
+    const parts = p.createdAt.split(/[/ :T-]/).map((n) => parseInt(n, 10));
+    if (parts.length >= 3) {
+      const d = parts[0];
+      const m = parts[1] - 1;
+      const y = parts[2];
+      const hour = parts[3] || 0;
+      const min = parts[4] || 0;
+      const t = new Date(y, m, d, hour, min).getTime();
+      if (!isNaN(t)) return t;
+    }
+  }
+  // Try extracting timestamp from ID (e.g., "proj-1771122334455" or "proj_1771122334455")
+  const idDigits = p.id?.match(/\d{10,}/);
+  if (idDigits && idDigits[0]) {
+    const num = Number(idDigits[0]);
+    if (num > 1000000000) return num;
+  }
+  // Fallback to startDate (e.g. DD/MM/YYYY)
+  if (p.startDate) {
+    const parsed = Date.parse(p.startDate);
+    if (!isNaN(parsed)) return parsed;
+    const parts = p.startDate.split('/');
+    if (parts.length === 3) {
+      const d = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const y = parseInt(parts[2], 10);
+      const t = new Date(y, m, d).getTime();
+      if (!isNaN(t)) return t;
+    }
+  }
+  return 0;
+}
+
+// Helper function to format created date string nicely
+export function formatProjectCreatedDate(p: ConstructionProject): string {
+  if (p.createdAt) {
+    if (p.createdAt.includes('T')) {
+      const d = new Date(p.createdAt);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}`;
+      }
+    }
+    return p.createdAt;
+  }
+  if (p.createdAtTimestamp) {
+    const d = new Date(p.createdAtTimestamp);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
+    }
+  }
+  return p.startDate ? `Khởi công: ${p.startDate}` : 'Đã tạo';
+}
 
 interface ProjectsViewProps {
   projects: ConstructionProject[];
@@ -57,6 +132,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const canExportExcel = hasUserPermission(currentUser, 'canExportExcel');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
+  const [sortBy, setSortBy] = useState<'created_desc' | 'created_asc' | 'name_asc' | 'start_date_desc'>('created_desc');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [selectedProjectDetail, setSelectedProjectDetail] = useState<ConstructionProject | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -100,24 +176,44 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     };
   };
 
-  // Filter list
-  const filteredProjects = projects.filter((p) => {
-    const search = searchTerm.toLowerCase();
-    const matchesSearch =
-      !searchTerm ||
-      p.name.toLowerCase().includes(search) ||
-      p.partner.toLowerCase().includes(search) ||
-      p.code.toLowerCase().includes(search) ||
-      (p.address && p.address.toLowerCase().includes(search));
+  // Filter & Sort list - Default: sorted by newest created time on top
+  const filteredProjects = useMemo(() => {
+    return projects
+      .filter((p) => {
+        const search = searchTerm.toLowerCase();
+        const matchesSearch =
+          !searchTerm ||
+          p.name.toLowerCase().includes(search) ||
+          p.partner.toLowerCase().includes(search) ||
+          p.code.toLowerCase().includes(search) ||
+          (p.address && p.address.toLowerCase().includes(search));
 
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'active' && (p.status === 'active' || !p.status)) ||
-      (statusFilter === 'pending' && p.status === 'pending') ||
-      (statusFilter === 'completed' && p.status === 'completed');
+        const matchesStatus =
+          statusFilter === 'all' ||
+          (statusFilter === 'active' && (p.status === 'active' || !p.status)) ||
+          (statusFilter === 'pending' && p.status === 'pending') ||
+          (statusFilter === 'completed' && p.status === 'completed');
 
-    return matchesSearch && matchesStatus;
-  });
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'created_desc') {
+          return getProjectCreationTimestamp(b) - getProjectCreationTimestamp(a);
+        }
+        if (sortBy === 'created_asc') {
+          return getProjectCreationTimestamp(a) - getProjectCreationTimestamp(b);
+        }
+        if (sortBy === 'name_asc') {
+          return a.name.localeCompare(b.name);
+        }
+        if (sortBy === 'start_date_desc') {
+          const tA = getProjectCreationTimestamp({ ...a, createdAtTimestamp: undefined, createdAt: undefined });
+          const tB = getProjectCreationTimestamp({ ...b, createdAtTimestamp: undefined, createdAt: undefined });
+          return tB - tA;
+        }
+        return getProjectCreationTimestamp(b) - getProjectCreationTimestamp(a);
+      });
+  }, [projects, searchTerm, statusFilter, sortBy]);
 
   // Aggregate stats across all projects
   const totalProjectsCount = projects.length;
@@ -338,25 +434,45 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           </div>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Tìm kiếm theo tên công trình, mã dự án, đối tác / chủ đầu tư, địa chỉ thi công..."
-            className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-slate-800 placeholder:text-slate-400 focus:border-blue-600 outline-none transition-colors"
-          />
-          {searchTerm && (
-            <button
-              type="button"
-              onClick={() => setSearchTerm('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+        {/* Search & Sort Bar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
+          {/* Search Input */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Tìm kiếm theo tên công trình, mã dự án, đối tác / chủ đầu tư, địa chỉ thi công..."
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-slate-800 placeholder:text-slate-400 focus:border-blue-600 outline-none transition-colors"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Sort selector */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 flex-shrink-0">
+            <ArrowUpDown className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+            <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap hidden sm:inline">Sắp xếp:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer pr-1"
+              title="Chọn thứ tự sắp xếp danh sách công trình"
             >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
+              <option value="created_desc">⚡ Mới tạo trước (Mặc định)</option>
+              <option value="created_asc">Cũ nhất trước</option>
+              <option value="start_date_desc">Ngày khởi công mới nhất</option>
+              <option value="name_asc">Tên công trình (A-Z)</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -367,6 +483,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             const stats = getProjectLiveStats(proj);
             const isCompleted = proj.status === 'completed';
             const isPending = proj.status === 'pending';
+            const creationTime = getProjectCreationTimestamp(proj);
+            const isRecentlyCreated = Date.now() - creationTime < 48 * 3600 * 1000;
 
             return (
               <div
@@ -377,10 +495,16 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   {/* Card Header */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                         <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold font-mono uppercase tracking-wider">
                           {proj.code}
                         </span>
+                        {isRecentlyCreated && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold">
+                            <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
+                            Mới tạo
+                          </span>
+                        )}
                       </div>
                       <h3
                         onClick={() => setSelectedProjectDetail(proj)}
@@ -447,7 +571,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Location & Start Date info */}
+                  {/* Location, Creation Date & Start Date info */}
                   <div className="space-y-1.5 text-xs text-slate-600 pt-1">
                     <div className="flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
@@ -456,10 +580,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center justify-between text-[11px] pt-0.5">
                       <div className="flex items-center gap-1.5 truncate">
                         <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                        <span>Khởi công: <strong>{proj.startDate}</strong></span>
+                        <span>Khởi công: <strong className="text-slate-700">{proj.startDate}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 flex-shrink-0" title="Thời gian tạo dự án">
+                        <Clock className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                        <span>Tạo: <strong className="text-slate-700 font-semibold">{formatProjectCreatedDate(proj)}</strong></span>
                       </div>
                     </div>
                   </div>
@@ -597,7 +725,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 <tr>
                   <th className="px-4 py-3">Mã & Công Trình</th>
                   <th className="px-4 py-3">Chủ Đầu Tư & Địa Chỉ</th>
-                  <th className="px-4 py-3">Khởi Công</th>
+                  <th className="px-4 py-3">Thời Gian Tạo & Khởi Công</th>
                   <th className="px-4 py-3 text-right">Vật Tư Xuất</th>
                   <th className="px-4 py-3 text-center">Công Nhật</th>
                   <th className="px-4 py-3 text-right">Giá Trị Hoàn Thành</th>
@@ -616,11 +744,19 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   filteredProjects.map((proj) => {
                     const stats = getProjectLiveStats(proj);
                     const isCompleted = proj.status === 'completed';
+                    const creationTime = getProjectCreationTimestamp(proj);
+                    const isRecentlyCreated = Date.now() - creationTime < 48 * 3600 * 1000;
+
                     return (
                       <tr key={proj.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="px-4 py-3">
-                          <div className="font-bold text-slate-900 text-sm hover:text-blue-600 cursor-pointer" onClick={() => setSelectedProjectDetail(proj)}>
+                          <div className="font-bold text-slate-900 text-sm hover:text-blue-600 cursor-pointer flex items-center gap-1.5" onClick={() => setSelectedProjectDetail(proj)}>
                             {proj.name}
+                            {isRecentlyCreated && (
+                              <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold">
+                                Mới
+                              </span>
+                            )}
                           </div>
                           <span className="font-mono text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded">
                             {proj.code}
@@ -631,7 +767,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           <div className="text-[11px] text-slate-500 max-w-[200px] truncate" title={proj.address}>{proj.address}</div>
                         </td>
                         <td className="px-4 py-3 font-mono text-[11px] whitespace-nowrap text-slate-600">
-                          {proj.startDate}
+                          <div className="text-slate-900 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-blue-500" />
+                            Tạo: {formatProjectCreatedDate(proj)}
+                          </div>
+                          <div className="text-slate-500 text-[10px] flex items-center gap-1">
+                            <Calendar className="w-2.5 h-2.5 text-slate-400" />
+                            Khởi công: {proj.startDate}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap">
                           {formatCurrency(stats.totalExportsVal)} đ

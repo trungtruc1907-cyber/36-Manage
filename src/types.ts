@@ -170,6 +170,9 @@ export interface ConstructionProject {
   category?: string;
   phone?: string;
   budget?: number;
+  createdAt?: string;
+  createdAtTimestamp?: number;
+  updatedAt?: string;
 }
 
 export interface StaffMember {

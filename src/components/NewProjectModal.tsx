@@ -137,18 +137,22 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
             : Number(completedValue) || 0
           : undefined;
 
+      const now = new Date();
       const projectPayload: ConstructionProject = {
         id: initialData?.id || `proj-${Date.now()}`,
         code: cleanCode,
         name: cleanName,
         partner: cleanPartner || 'Chủ đầu tư mới',
         address: cleanAddress || 'TP. Hồ Chí Minh',
-        startDate: startDate || new Date().toISOString().split('T')[0],
+        startDate: startDate || now.toISOString().split('T')[0],
         status: status,
         totalExportsValue: initialData ? initialData.totalExportsValue : 0,
         workdaysLogged: initialData ? initialData.workdaysLogged : 0,
         completedValue: numCompletedValue,
         notes: notes.trim() || undefined,
+        createdAt: initialData?.createdAt || now.toISOString(),
+        createdAtTimestamp: initialData?.createdAtTimestamp || Date.now(),
+        updatedAt: now.toISOString(),
       };
 
       await onSaveProject(projectPayload);

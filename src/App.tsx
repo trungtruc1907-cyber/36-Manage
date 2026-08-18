@@ -473,11 +473,18 @@ export default function App() {
   };
 
   const handleSaveProject = async (proj: ConstructionProject) => {
+    const isExisting = projects.some((p) => p.id === proj.id);
+    const now = new Date();
+    const existingProj = isExisting ? projects.find((p) => p.id === proj.id) : null;
+    
     const scopedProject: ConstructionProject = {
       ...proj,
       tenantId: activeTenantId,
+      createdAt: proj.createdAt || existingProj?.createdAt || now.toISOString(),
+      createdAtTimestamp: proj.createdAtTimestamp || existingProj?.createdAtTimestamp || Date.now(),
+      updatedAt: now.toISOString(),
     };
-    const isExisting = projects.some((p) => p.id === scopedProject.id);
+
     if (isExisting) {
       setProjects((prev) => prev.map((p) => (p.id === scopedProject.id ? scopedProject : p)));
       await updateProjectInFirestore(scopedProject, activeTenantId);
