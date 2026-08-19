@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { ConstructionProject, ExportedGood, LaborDailyLog, StaffMember, CompanySettings, UserAccount, hasUserPermission } from '../types';
 import { exportProjectToExcel, printProjectReport } from '../utils/projectExportUtils';
+import { DeleteConfirmationModal, DeleteModalItemInfo } from './DeleteConfirmationModal';
 
 // Helper function to extract exact creation timestamp for consistent sorting
 export function getProjectCreationTimestamp(p: ConstructionProject): number {
@@ -136,6 +137,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [selectedProjectDetail, setSelectedProjectDetail] = useState<ConstructionProject | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<ConstructionProject | null>(null);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
 
   // Quick Complete Popup state
   const [projectToComplete, setProjectToComplete] = useState<ConstructionProject | null>(null);
@@ -233,18 +236,51 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     .filter((p) => p.status === 'completed' && p.completedValue)
     .reduce((sum, p) => sum + (p.completedValue || 0), 0);
 
-  const handleDeleteConfirm = async (id: string, name: string) => {
-    if (window.confirm(`Xác nhận xóa công trình "${name}" khỏi cơ sở dữ liệu Firebase?`)) {
-      setDeletingId(id);
-      if (onDeleteProject) {
-        await onDeleteProject(id);
-      }
-      setDeletingId(null);
-      if (selectedProjectDetail?.id === id) {
+  const handleOpenDeleteModal = (proj: ConstructionProject) => {
+    setProjectToDelete(proj);
+  };
+
+  const handleConfirmDeleteProject = async () => {
+    if (!projectToDelete || !onDeleteProject) return;
+    try {
+      setIsDeletingProject(true);
+      const targetId = projectToDelete.id;
+      await onDeleteProject(targetId);
+      if (selectedProjectDetail?.id === targetId) {
         setSelectedProjectDetail(null);
       }
+    } finally {
+      setIsDeletingProject(false);
+      setProjectToDelete(null);
     }
   };
+
+  const deleteModalInfo: DeleteModalItemInfo | null = useMemo(() => {
+    if (!projectToDelete) return null;
+    const stats = getProjectLiveStats(projectToDelete);
+    const warnings: string[] = [];
+
+    if (stats.exportsList.length > 0) {
+      warnings.push(
+        `Có ${stats.exportsList.length} phiếu xuất kho vật tư liên kết (Tổng giá trị: ${formatCurrency(stats.totalExportsVal)} đ).`
+      );
+    }
+    if (stats.laborList.length > 0) {
+      warnings.push(
+        `Có ${stats.laborList.length} lượt chấm công nhân sự liên kết (Tổng số công: ${stats.totalWorkdays.toFixed(1)}, chi phí: ${formatCurrency(stats.totalLaborCost)} đ).`
+      );
+    }
+
+    return {
+      title: 'Xác nhận xóa công trình thi công',
+      itemType: 'project',
+      itemName: projectToDelete.name,
+      itemCode: projectToDelete.code,
+      warningDetails: warnings,
+      dangerMessage:
+        'Hồ sơ công trình này sẽ được xóa vĩnh viễn khỏi hệ thống Firebase Realtime Database.',
+    };
+  }, [projectToDelete, exportedGoods, laborLogs]);
 
   // Open Quick Complete Dialog
   const handleOpenCompleteModal = (proj: ConstructionProject) => {
@@ -567,7 +603,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         {onDeleteProject && (
                           <button
                             type="button"
-                            onClick={() => handleDeleteConfirm(proj.id, proj.name)}
+                            onClick={() => handleOpenDeleteModal(proj)}
                             disabled={deletingId === proj.id}
                             className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                             title="Xóa công trình khỏi cơ sở dữ liệu"
@@ -867,7 +903,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                             {onDeleteProject && (
                               <button
                                 type="button"
-                                onClick={() => handleDeleteConfirm(proj.id, proj.name)}
+                                onClick={() => handleOpenDeleteModal(proj)}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                                 title="Xóa công trình"
                               >
@@ -969,6 +1005,21 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                           <span>Sửa</span>
+                        </button>
+                      )}
+
+                      {onDeleteProject && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const p = selectedProjectDetail;
+                            handleOpenDeleteModal(p);
+                          }}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 hover:text-rose-700 text-rose-600 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Xóa công trình này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Xóa</span>
                         </button>
                       )}
 
@@ -1362,6 +1413,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           </div>
         </div>
       )}
+      {/* DELETE CONFIRMATION MODAL */}
+      <DeleteConfirmationModal
+        isOpen={!!projectToDelete}
+        onClose={() => setProjectToDelete(null)}
+        onConfirm={handleConfirmDeleteProject}
+        itemInfo={deleteModalInfo}
+        isDeleting={isDeletingProject}
+      />
     </div>
   );
 };

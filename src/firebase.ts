@@ -29,6 +29,7 @@ import {
   INITIAL_MATERIALS,
   INITIAL_PROJECTS,
   INITIAL_STAFF,
+  INITIAL_ACTIVITY_LOGS,
 } from './data/mockData';
 
 export const DEFAULT_TENANT_ID = 'standalone';
@@ -187,8 +188,8 @@ export const testFirestoreConnection = testDatabaseConnection;
 // ============================================================================
 
 /**
- * Initializes the standalone database schema without mock demo data.
- * Ensures system accounts and company settings exist.
+ * Initializes the standalone database schema and restores the core data branches.
+ * Ensures system accounts, company settings, and standard business branches exist.
  */
 export async function initializeDatabaseArchitecture(): Promise<void> {
   try {
@@ -208,11 +209,16 @@ export async function initializeDatabaseArchitecture(): Promise<void> {
       await set(ref(db, 'companySettings'), cleanForDatabase(DEFAULT_COMPANY_SETTINGS));
     }
 
-    // 3. Remove old multi-tenant nodes and lingering demo data if present
+    // 3. Remove old multi-tenant nodes if present
     await remove(ref(db, 'tenants')).catch(() => {});
-    
-    // Purge demo records from standalone nodes
-    await purgeAllDemoDataFromDatabase();
+
+    // 4. Check if core business data is empty, if so restore all 6 branches
+    const projectsSnap = await get(ref(db, 'projects'));
+    const materialsSnap = await get(ref(db, 'materials'));
+    if (!projectsSnap.exists() || !projectsSnap.val() || !materialsSnap.exists() || !materialsSnap.val()) {
+      console.log('Restoring the 6 core business data branches to Firebase Realtime Database...');
+      await restoreAllCoreDataBranchesToDatabase();
+    }
   } catch (err) {
     console.warn('Note during database initialization:', err);
   }
@@ -575,13 +581,76 @@ export async function clearAllDatabaseData(_ignoredTenantId?: string) {
   }
 }
 
-// Sample data seeding (disabled to keep database clean)
-export async function seedSampleDataToDatabase(_ignoredTenantId?: string, _prefix: string = 'CT') {
-  return;
-}
-export const seedSampleDataToFirestore = seedSampleDataToDatabase;
+/**
+ * Restores the 6 core business data branches to Firebase Realtime Database:
+ * 1. projects/: Danh mục công trình thi công, tiến độ và chi phí xuất kho.
+ * 2. materials/: Kho vật tư, định mức tồn kho và giá vốn/giá bán.
+ * 3. exportedGoods/: Lịch sử các phiếu xuất kho vật tư theo công trình.
+ * 4. laborLogs/: Nhật ký chấm công nhân sự theo chuẩn định dạng ngày tháng dd/mm/yyyy.
+ * 5. staff/: Danh sách cán bộ kỹ thuật, giám sát và đội thợ thi công.
+ * 6. activityLogs/: Lịch sử hoạt động và nhật ký kiểm toán hệ thống.
+ */
+export async function restoreAllCoreDataBranchesToDatabase(
+  _ignoredTenantId?: string,
+  _prefix: string = 'CT'
+): Promise<void> {
+  try {
+    // 1. projects/
+    const projectsMap: Record<string, ConstructionProject> = {};
+    for (const p of INITIAL_PROJECTS) {
+      projectsMap[p.id] = p;
+    }
+    await set(ref(db, 'projects'), projectsMap);
 
-// Purge demo records and clean business tables from standalone database
+    // 2. materials/
+    const materialsMap: Record<string, MaterialItem> = {};
+    for (const m of INITIAL_MATERIALS) {
+      materialsMap[m.id] = m;
+    }
+    await set(ref(db, 'materials'), materialsMap);
+
+    // 3. exportedGoods/
+    const exportsMap: Record<string, ExportedGood> = {};
+    for (const e of INITIAL_EXPORTED_GOODS) {
+      exportsMap[e.id] = e;
+    }
+    await set(ref(db, 'exportedGoods'), exportsMap);
+
+    // 4. laborLogs/ (định dạng ngày tháng dd/mm/yyyy)
+    const laborMap: Record<string, LaborDailyLog> = {};
+    for (let i = 0; i < INITIAL_LABOR_LOGS.length; i++) {
+      const log = INITIAL_LABOR_LOGS[i];
+      const id = log.id || `log_${i + 1}`;
+      laborMap[id] = { ...log, id };
+    }
+    await set(ref(db, 'laborLogs'), laborMap);
+
+    // 5. staff/
+    const staffMap: Record<string, StaffMember> = {};
+    for (const s of INITIAL_STAFF) {
+      staffMap[s.id] = s;
+    }
+    await set(ref(db, 'staff'), staffMap);
+
+    // 6. activityLogs/
+    const logsMap: Record<string, ActivityLog> = {};
+    for (const a of INITIAL_ACTIVITY_LOGS) {
+      logsMap[a.id] = a;
+    }
+    await set(ref(db, 'activityLogs'), logsMap);
+
+    console.log('Successfully restored all 6 core data branches to standalone database.');
+  } catch (err) {
+    console.error('Error restoring core data branches:', err);
+    handleDatabaseError(err, OperationType.WRITE, 'root');
+  }
+}
+
+// Backward compatibility aliases
+export const seedSampleDataToDatabase = restoreAllCoreDataBranchesToDatabase;
+export const seedSampleDataToFirestore = restoreAllCoreDataBranchesToDatabase;
+
+// Purge demo records from standalone database if ever needed
 export async function purgeAllDemoDataFromDatabase() {
   try {
     const nodes = ['projects', 'materials', 'exportedGoods', 'laborLogs', 'staff', 'activityLogs', 'tenants'];

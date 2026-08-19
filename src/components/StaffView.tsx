@@ -23,6 +23,7 @@ import {
 import { ConstructionProject, LaborDailyLog, StaffMember, CompanySettings, UserAccount } from '../types';
 import { StaffAttendanceDetailModal } from './StaffAttendanceDetailModal';
 import { TimesheetView } from './TimesheetView';
+import { DeleteConfirmationModal, DeleteModalItemInfo } from './DeleteConfirmationModal';
 
 interface StaffViewProps {
   staff: StaffMember[];
@@ -58,6 +59,8 @@ export const StaffView: React.FC<StaffViewProps> = ({
   const [roleFilter, setRoleFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [staffToDelete, setStaffToDelete] = useState<StaffMember | null>(null);
+  const [isDeletingStaff, setIsDeletingStaff] = useState(false);
 
   // Selected staff for viewing / editing detailed attendance history
   const [selectedStaffForAttendance, setSelectedStaffForAttendance] = useState<StaffMember | null>(null);
@@ -136,6 +139,54 @@ export const StaffView: React.FC<StaffViewProps> = ({
     setStatus(member.status || 'Sẵn sàng nhận dự án mới');
     setIsModalOpen(true);
   };
+
+  // Delete Staff Handlers
+  const handleOpenDeleteStaffModal = (member: StaffMember) => {
+    setStaffToDelete(member);
+  };
+
+  const handleConfirmDeleteStaff = async () => {
+    if (!staffToDelete || !onDeleteStaff) return;
+    try {
+      setIsDeletingStaff(true);
+      const targetId = staffToDelete.id;
+      await onDeleteStaff(targetId);
+      if (editingStaff?.id === targetId) {
+        setIsModalOpen(false);
+        setEditingStaff(null);
+      }
+      if (selectedStaffForAttendance?.id === targetId) {
+        setSelectedStaffForAttendance(null);
+      }
+    } finally {
+      setIsDeletingStaff(false);
+      setStaffToDelete(null);
+    }
+  };
+
+  const deleteStaffModalInfo: DeleteModalItemInfo | null = useMemo(() => {
+    if (!staffToDelete) return null;
+    const summary = getStaffAttendanceSummary.get(staffToDelete.id);
+    const warnings: string[] = [];
+
+    if (summary && summary.logCount > 0) {
+      warnings.push(
+        `Đã ghi nhận ${summary.logCount} lượt chấm công (${summary.totalWorkdays.toFixed(1)} ngày công).`
+      );
+      warnings.push(
+        `Tổng thu nhập lương ngày đã tích lũy: ${formatCurrency(summary.totalCost)}.`
+      );
+    }
+
+    return {
+      title: 'Xác nhận xóa hồ sơ nhân sự',
+      itemType: 'staff',
+      itemName: `${staffToDelete.name} (${staffToDelete.role || 'Nhân sự'})`,
+      warningDetails: warnings,
+      dangerMessage:
+        'Hồ sơ nhân sự này sẽ được xóa vĩnh viễn khỏi danh sách quản lý Firebase.',
+    };
+  }, [staffToDelete, getStaffAttendanceSummary]);
 
   const filtered = useMemo(() => {
     const search = searchTerm.toLowerCase().trim();
@@ -442,11 +493,7 @@ export const StaffView: React.FC<StaffViewProps> = ({
                     {onDeleteStaff && (
                       <button
                         type="button"
-                        onClick={() => {
-                          if (window.confirm(`Xác nhận xóa nhân sự "${w.name}" khỏi cơ sở dữ liệu?`)) {
-                            onDeleteStaff(w.id);
-                          }
-                        }}
+                        onClick={() => handleOpenDeleteStaffModal(w)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer"
                         title="Xóa nhân sự"
                       >
@@ -721,28 +768,47 @@ export const StaffView: React.FC<StaffViewProps> = ({
               </div>
 
               {/* Buttons */}
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 bg-[#0c59be] hover:bg-[#094ca7] text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-all flex items-center gap-1.5"
-                >
-                  {isSubmitting ? (
-                    'Đang lưu...'
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{editingStaff ? 'Lưu thay đổi' : 'Lưu nhân sự'}</span>
-                    </>
+              <div className="pt-3 flex items-center justify-between gap-2 border-t border-slate-100">
+                <div>
+                  {editingStaff && onDeleteStaff && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = editingStaff;
+                        setIsModalOpen(false);
+                        handleOpenDeleteStaffModal(target);
+                      }}
+                      className="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Xóa nhân sự</span>
+                    </button>
                   )}
-                </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 bg-[#0c59be] hover:bg-[#094ca7] text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-all flex items-center gap-1.5"
+                  >
+                    {isSubmitting ? (
+                      'Đang lưu...'
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{editingStaff ? 'Lưu thay đổi' : 'Lưu nhân sự'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -761,6 +827,15 @@ export const StaffView: React.FC<StaffViewProps> = ({
           onAddLaborLog={onAddLaborLog}
         />
       )}
+
+      {/* DELETE STAFF CONFIRMATION MODAL */}
+      <DeleteConfirmationModal
+        isOpen={!!staffToDelete}
+        onClose={() => setStaffToDelete(null)}
+        onConfirm={handleConfirmDeleteStaff}
+        itemInfo={deleteStaffModalInfo}
+        isDeleting={isDeletingStaff}
+      />
     </div>
   );
 };

@@ -38,6 +38,7 @@ import {
   exportMaterialsToExcel,
 } from '../utils/materialExportUtils';
 import { ImportMaterialsModal } from './ImportMaterialsModal';
+import { DeleteConfirmationModal, DeleteModalItemInfo } from './DeleteConfirmationModal';
 
 interface MaterialsViewProps {
   materials: MaterialItem[];
@@ -128,6 +129,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const [adjustQuantity, setAdjustQuantity] = useState<number>(10);
   const [adjustNote, setAdjustNote] = useState<string>('Nhập hàng bổ sung từ kho tổng');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [materialToDelete, setMaterialToDelete] = useState<MaterialItem | null>(null);
+  const [isDeletingMaterial, setIsDeletingMaterial] = useState(false);
 
   // Form states for Material Add/Edit
   const [formItemType, setFormItemType] = useState('Hàng hóa');
@@ -293,6 +296,67 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setIsAdjustStockModalOpen(false);
     setAdjustTargetMaterial(null);
   };
+
+  // Delete Material Handling with Relationship Warnings
+  const handleOpenDeleteMaterialModal = (mat: MaterialItem) => {
+    setMaterialToDelete(mat);
+  };
+
+  const handleConfirmDeleteMaterial = async () => {
+    if (!materialToDelete || !onDeleteMaterial) return;
+    try {
+      setIsDeletingMaterial(true);
+      const targetId = materialToDelete.id;
+      await onDeleteMaterial(targetId);
+      if (selectedMaterialDetail?.id === targetId) {
+        setSelectedMaterialDetail(null);
+      }
+    } finally {
+      setIsDeletingMaterial(false);
+      setMaterialToDelete(null);
+    }
+  };
+
+  const deleteMaterialModalInfo: DeleteModalItemInfo | null = useMemo(() => {
+    if (!materialToDelete) return null;
+    const warnings: string[] = [];
+    const matNameKey = (materialToDelete.name || '').trim().toLowerCase();
+    const matCodeKey = (materialToDelete.code || '').trim().toLowerCase();
+
+    const linkedExports = exportedGoods.filter((e) => {
+      const expMatName = (e.materialName || '').trim().toLowerCase();
+      return (
+        (matCodeKey && e.materialCode && e.materialCode.trim().toLowerCase() === matCodeKey) ||
+        (matNameKey && expMatName === matNameKey)
+      );
+    });
+
+    if (materialToDelete.stockQty && materialToDelete.stockQty > 0) {
+      const stockVal =
+        materialToDelete.stockQty *
+        (materialToDelete.price || materialToDelete.defaultPrice || 0);
+      warnings.push(
+        `Vật tư hiện còn ${materialToDelete.stockQty} ${materialToDelete.unit} tồn trong kho (Giá trị niêm yết: ${new Intl.NumberFormat('vi-VN').format(stockVal)} đ).`
+      );
+    }
+
+    if (linkedExports.length > 0) {
+      const totalExportVal = linkedExports.reduce((sum, e) => sum + (e.totalPrice || 0), 0);
+      warnings.push(
+        `Có ${linkedExports.length} phiếu xuất kho lịch sử liên quan đến vật tư này (Tổng giá trị xuất: ${new Intl.NumberFormat('vi-VN').format(totalExportVal)} đ).`
+      );
+    }
+
+    return {
+      title: 'Xác nhận xóa vật tư khỏi kho',
+      itemType: 'material',
+      itemName: materialToDelete.name,
+      itemCode: materialToDelete.code,
+      warningDetails: warnings,
+      dangerMessage:
+        'Vật tư này sẽ được xóa hoàn toàn khỏi danh mục và kho lưu trữ Firebase.',
+    };
+  }, [materialToDelete, exportedGoods]);
 
   // Handle Excel Import completion
   const handleImportCompleted = async (
@@ -1174,11 +1238,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                               {onDeleteMaterial && (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (window.confirm(`Xác nhận xóa vật tư "${mat.name}"?`)) {
-                                      onDeleteMaterial(mat.id);
-                                    }
-                                  }}
+                                  onClick={() => handleOpenDeleteMaterialModal(mat)}
                                   className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
                                   title="Xóa vật tư"
                                 >
@@ -1286,6 +1346,16 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
+                        {onDeleteMaterial && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDeleteMaterialModal(mat)}
+                            className="p-2 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200"
+                            title="Xóa vật tư"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2227,6 +2297,19 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 >
                   Chỉnh sửa
                 </button>
+                {onDeleteMaterial && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const mat = selectedMaterialDetail;
+                      handleOpenDeleteMaterialModal(mat);
+                    }}
+                    className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold border border-rose-200 transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xóa vật tư</span>
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -2614,6 +2697,15 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         onClose={() => setIsImportModalOpen(false)}
         existingMaterials={materials}
         onImportComplete={handleImportCompleted}
+      />
+
+      {/* DELETE MATERIAL CONFIRMATION MODAL */}
+      <DeleteConfirmationModal
+        isOpen={!!materialToDelete}
+        onClose={() => setMaterialToDelete(null)}
+        onConfirm={handleConfirmDeleteMaterial}
+        itemInfo={deleteMaterialModalInfo}
+        isDeleting={isDeletingMaterial}
       />
     </div>
   );
