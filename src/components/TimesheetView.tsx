@@ -28,6 +28,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { ConstructionProject, LaborDailyLog, StaffMember, CompanySettings, UserAccount, hasUserPermission } from '../types';
+import { extractYearMonthFromDate, extractDayFromDate, normalizeDateToDDMMYYYY } from '../utils/dateUtils';
 
 interface TimesheetViewProps {
   staff: StaffMember[];
@@ -112,8 +113,9 @@ export const TimesheetView: React.FC<TimesheetViewProps> = ({
     set.add(formatMonthStr(prevYear, prevMonth));
 
     laborLogs.forEach((log) => {
-      if (log.date && log.date.length >= 7) {
-        set.add(log.date.substring(0, 7));
+      if (log.date) {
+        const ym = extractYearMonthFromDate(log.date).yearMonthStr;
+        if (ym) set.add(ym);
       }
     });
 
@@ -166,7 +168,9 @@ export const TimesheetView: React.FC<TimesheetViewProps> = ({
   const monthlyData = useMemo(() => {
     // 1. Gather all logs that match the selected month (YYYY-MM) and optional project filter
     const logsInMonth = laborLogs.filter((log) => {
-      if (!log.date || !log.date.startsWith(selectedMonthStr)) return false;
+      if (!log.date) return false;
+      const logYm = extractYearMonthFromDate(log.date).yearMonthStr;
+      if (logYm !== selectedMonthStr) return false;
       if (selectedProject !== 'all') {
         const logProj = (log.projectName || '').trim().toLowerCase();
         const targetProj = selectedProject.trim().toLowerCase();
@@ -199,8 +203,7 @@ export const TimesheetView: React.FC<TimesheetViewProps> = ({
 
     // Process logs
     logsInMonth.forEach((log) => {
-      const logDateParts = log.date.split('-');
-      const logDay = parseInt(logDateParts[2], 10);
+      const logDay = extractDayFromDate(log.date);
       if (isNaN(logDay) || logDay < 1 || logDay > 31) return;
 
       const logProjName = log.projectName || 'Công trình chung';

@@ -15,6 +15,13 @@ import {
   Check,
 } from 'lucide-react';
 import { ConstructionProject, LaborDailyLog, LaborWorkerDetail, StaffMember } from '../types';
+import {
+  normalizeDateToDDMMYYYY,
+  convertToDateInputIso,
+  parseDateToTimestamp,
+  extractYearMonthFromDate,
+  getVietnameseDayOfWeek,
+} from '../utils/dateUtils';
 
 interface StaffAttendanceDetailModalProps {
   isOpen: boolean;
@@ -76,27 +83,9 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
     return new Intl.NumberFormat('vi-VN').format(val) + ' đ';
   };
 
-  // Date helper
+  // Date helper (dd/mm/yyyy)
   const formatDateDisplay = (dateStr: string) => {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return dateStr;
-  };
-
-  // Get day of week in Vietnamese
-  const getDayOfWeekName = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return '';
-      const dayIndex = d.getDay();
-      const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
-      return days[dayIndex] || '';
-    } catch {
-      return '';
-    }
+    return normalizeDateToDDMMYYYY(dateStr);
   };
 
   // Extract all attendance records for this specific staff member
@@ -114,8 +103,8 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
               logId: log.id || `log_${log.date}_${index}`,
               originalLog: log,
               workerIndexInLog: index,
-              date: log.date,
-              dayOfWeek: log.dayOfWeek,
+              date: normalizeDateToDDMMYYYY(log.date),
+              dayOfWeek: log.dayOfWeek || getVietnameseDayOfWeek(log.date),
               projectName: log.projectName || 'Công trình thi công',
               projectCode: log.projectCode,
               workdays: wd.workdays || 1.0,
@@ -138,8 +127,8 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
             logId: log.id || `log_${log.date}`,
             originalLog: log,
             workerIndexInLog: -1,
-            date: log.date,
-            dayOfWeek: log.dayOfWeek,
+            date: normalizeDateToDDMMYYYY(log.date),
+            dayOfWeek: log.dayOfWeek || getVietnameseDayOfWeek(log.date),
             projectName: log.projectName || 'Công trình thi công',
             projectCode: log.projectCode,
             workdays: individualWorkdays,
@@ -152,16 +141,17 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
       }
     });
 
-    // Sort descending by date
-    return records.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // Sort descending by date (dd/mm/yyyy supported)
+    return records.sort((a, b) => parseDateToTimestamp(b.date) - parseDateToTimestamp(a.date));
   }, [staffMember, laborLogs]);
 
   // Distinct months for filtering
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
     attendanceRecords.forEach((r) => {
-      if (r.date && r.date.length >= 7) {
-        monthsSet.add(r.date.substring(0, 7)); // YYYY-MM
+      if (r.date) {
+        const ym = extractYearMonthFromDate(r.date).yearMonthStr;
+        if (ym) monthsSet.add(ym);
       }
     });
     return Array.from(monthsSet).sort().reverse();
@@ -171,7 +161,8 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
   const filteredRecords = useMemo(() => {
     return attendanceRecords.filter((r) => {
       const matchProj = filterProject === 'all' || r.projectName === filterProject;
-      const matchMonth = filterMonth === 'all' || (r.date && r.date.startsWith(filterMonth));
+      const recordYm = extractYearMonthFromDate(r.date).yearMonthStr;
+      const matchMonth = filterMonth === 'all' || recordYm === filterMonth;
       const matchSearch =
         !searchTerm.trim() ||
         r.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -198,7 +189,7 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
   const handleOpenEdit = (rec: WorkerAttendanceRecord) => {
     setEditingRecord(rec);
     setIsAddMode(false);
-    setFormDate(rec.date);
+    setFormDate(convertToDateInputIso(rec.date));
     setFormProject(rec.projectName);
     setFormWorkdays(rec.workdays);
     setFormDailyWage(rec.dailyWage || staffMember.dailyWage || 450000);
@@ -229,6 +220,7 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
       const orig = editingRecord.originalLog;
       const targetProj = projects.find((p) => p.name === formProject);
       const calculatedCost = formWorkdays * formDailyWage;
+      const formattedDate = normalizeDateToDDMMYYYY(formDate);
 
       // Update workerDetails inside the original log
       let updatedWorkerDetails: LaborWorkerDetail[] = orig.workerDetails ? [...orig.workerDetails] : [];
@@ -272,8 +264,8 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
       const updatedLog: LaborDailyLog = {
         ...orig,
         id: orig.id,
-        date: formDate,
-        dayOfWeek: getDayOfWeekName(formDate) || orig.dayOfWeek,
+        date: formattedDate,
+        dayOfWeek: getVietnameseDayOfWeek(formDate) || orig.dayOfWeek,
         projectName: formProject,
         projectCode: targetProj?.code || orig.projectCode || 'CT-01',
         totalWorkdays: newTotalWorkdays,
@@ -302,11 +294,12 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
       const targetProj = projects.find((p) => p.name === formProject);
       const calculatedCost = formWorkdays * formDailyWage;
       const isMain = staffMember.role.toLowerCase().includes('chính') || staffMember.role.toLowerCase().includes('tổ trưởng');
+      const formattedDate = normalizeDateToDDMMYYYY(formDate);
 
       const newLog: LaborDailyLog = {
         id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        date: formDate,
-        dayOfWeek: getDayOfWeekName(formDate) || 'Thứ Hai',
+        date: formattedDate,
+        dayOfWeek: getVietnameseDayOfWeek(formDate) || 'Thứ Hai',
         projectName: formProject,
         projectCode: targetProj?.code || 'CT-01',
         mainWorkers: isMain ? 1 : 0,
@@ -696,7 +689,7 @@ export const StaffAttendanceDetailModal: React.FC<StaffAttendanceDetailModalProp
           ) : (
             <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
               {filteredRecords.map((rec, idx) => {
-                const dayName = getDayOfWeekName(rec.date);
+                const dayName = rec.dayOfWeek || getVietnameseDayOfWeek(rec.date);
                 const isHalfDay = rec.workdays === 0.5;
 
                 return (

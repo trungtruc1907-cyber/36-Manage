@@ -89,6 +89,7 @@ import { NewExportModal } from './components/NewExportModal';
 import { LaborDetailModal } from './components/LaborDetailModal';
 import { SupportModal } from './components/SupportModal';
 import { ActivityLogsModal } from './components/ActivityLogsModal';
+import { normalizeDateToDDMMYYYY } from './utils/dateUtils';
 
 export default function App() {
   // Multi-Tenant State
@@ -785,8 +786,10 @@ export default function App() {
   };
 
   const handleAddLaborLog = async (newLog: LaborDailyLog) => {
+    const formattedDate = normalizeDateToDDMMYYYY(newLog.date);
     const scopedLog: LaborDailyLog = {
       ...newLog,
+      date: formattedDate,
       tenantId: activeTenantId,
     };
 
@@ -817,8 +820,10 @@ export default function App() {
   };
 
   const handleUpdateLaborLog = async (updatedLog: LaborDailyLog) => {
+    const formattedDate = normalizeDateToDDMMYYYY(updatedLog.date);
     const scopedLog: LaborDailyLog = {
       ...updatedLog,
+      date: formattedDate,
       tenantId: activeTenantId,
     };
     setLaborLogs((prev) => prev.map((l) => (l.id === scopedLog.id ? scopedLog : l)));

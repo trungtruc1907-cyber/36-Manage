@@ -16,6 +16,7 @@ import {
   Briefcase,
 } from 'lucide-react';
 import { LaborDailyLog, ConstructionProject, StaffMember, LaborWorkerDetail } from '../types';
+import { normalizeDateToDDMMYYYY, getVietnameseDayOfWeek } from '../utils/dateUtils';
 
 interface LaborDetailModalProps {
   isOpen: boolean;
@@ -54,13 +55,12 @@ export const LaborDetailModal: React.FC<LaborDetailModalProps> = ({
     const now = new Date();
     const d = String(now.getDate()).padStart(2, '0');
     const m = String(now.getMonth() + 1).padStart(2, '0');
-    return `${d}/${m}`;
+    const y = now.getFullYear();
+    return `${d}/${m}/${y}`;
   };
 
   const getTodayDayOfWeek = () => {
-    const day = new Date().getDay();
-    const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-    return days[day] || 'T2';
+    return getVietnameseDayOfWeek(null, false);
   };
 
   // Form states
@@ -213,21 +213,9 @@ export const LaborDetailModal: React.FC<LaborDetailModalProps> = ({
       return;
     }
 
-    // Convert dateIso to DD/MM and Day of Week
-    let dateStr = getTodayFormatted();
-    let dayOfWeekStr = getTodayDayOfWeek();
-
-    try {
-      const parts = dateIso.split('-');
-      if (parts.length === 3) {
-        dateStr = `${parts[2]}/${parts[1]}`;
-        const dObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-        const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-        dayOfWeekStr = days[dObj.getDay()] || 'T2';
-      }
-    } catch {
-      // fallback
-    }
+    // Convert dateIso to DD/MM/YYYY and Day of Week
+    const dateStr = normalizeDateToDDMMYYYY(dateIso);
+    const dayOfWeekStr = getVietnameseDayOfWeek(dateIso, false);
 
     // Find project code
     const targetProjectObj = projects.find((p) => p.name === selectedProject);

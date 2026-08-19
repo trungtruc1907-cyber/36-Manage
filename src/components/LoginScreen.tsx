@@ -73,9 +73,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
   // Login Form States
   const [username, setUsername] = useState(() => {
-    return localStorage.getItem('chongtham36_last_username') || 'admin';
+    return localStorage.getItem('chongtham36_last_username') || '';
   });
-  const [password, setPassword] = useState('123456');
+  const [password, setPassword] = useState('');
   const [orgId, setOrgId] = useState(() => {
     return localStorage.getItem('chongtham36_last_orgId') || companySettings?.orgId || 'CT36';
   });
@@ -88,7 +88,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
   // Forgot Password / Password Recovery Form States
   const [forgotUsername, setForgotUsername] = useState('');
-  const [forgotOrgId, setForgotOrgId] = useState(companySettings?.orgId || 'CT36');
+  const [forgotOrgId, setForgotOrgId] = useState(companySettings?.orgId || '');
   const [forgotVerification, setForgotVerification] = useState('');
   const [forgotNewPassword, setForgotNewPassword] = useState('');
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
