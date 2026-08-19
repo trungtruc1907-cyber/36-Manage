@@ -188,12 +188,12 @@ export const testFirestoreConnection = testDatabaseConnection;
 // ============================================================================
 
 /**
- * Initializes the standalone database schema and restores the core data branches.
- * Ensures system accounts, company settings, and standard business branches exist.
+ * Initializes the standalone database schema.
+ * Ensures system accounts and company settings exist without pushing any sample/demo data.
  */
 export async function initializeDatabaseArchitecture(): Promise<void> {
   try {
-    // 1. Ensure system accounts are initialized
+    // 1. Ensure system accounts are initialized if not yet existing
     const accountsSnap = await get(ref(db, 'systemAccounts'));
     if (!accountsSnap.exists() || !accountsSnap.val()) {
       const accountsMap: Record<string, UserAccountRecord> = {};
@@ -203,7 +203,7 @@ export async function initializeDatabaseArchitecture(): Promise<void> {
       await set(ref(db, 'systemAccounts'), accountsMap);
     }
 
-    // 2. Ensure company settings exist
+    // 2. Ensure company settings exist if not yet existing
     const settingsSnap = await get(ref(db, 'companySettings'));
     if (!settingsSnap.exists() || !settingsSnap.val()) {
       await set(ref(db, 'companySettings'), cleanForDatabase(DEFAULT_COMPANY_SETTINGS));
@@ -211,14 +211,6 @@ export async function initializeDatabaseArchitecture(): Promise<void> {
 
     // 3. Remove old multi-tenant nodes if present
     await remove(ref(db, 'tenants')).catch(() => {});
-
-    // 4. Check if core business data is empty, if so restore all 6 branches
-    const projectsSnap = await get(ref(db, 'projects'));
-    const materialsSnap = await get(ref(db, 'materials'));
-    if (!projectsSnap.exists() || !projectsSnap.val() || !materialsSnap.exists() || !materialsSnap.val()) {
-      console.log('Restoring the 6 core business data branches to Firebase Realtime Database...');
-      await restoreAllCoreDataBranchesToDatabase();
-    }
   } catch (err) {
     console.warn('Note during database initialization:', err);
   }

@@ -12,14 +12,7 @@ import {
   Building2,
   Sparkles,
 } from 'lucide-react';
-import {
-  DEFAULT_COMPANY_SETTINGS,
-  INITIAL_EXPORTED_GOODS,
-  INITIAL_LABOR_LOGS,
-  INITIAL_MATERIALS,
-  INITIAL_PROJECTS,
-  INITIAL_STAFF,
-} from './data/mockData';
+import { DEFAULT_COMPANY_SETTINGS } from './data/mockData';
 import {
   CompanySettings,
   ConstructionProject,
