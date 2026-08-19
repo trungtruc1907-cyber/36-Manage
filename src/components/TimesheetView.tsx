@@ -184,10 +184,12 @@ export const TimesheetView: React.FC<TimesheetViewProps> = ({
 
     // Seed registered staff members first
     staff.forEach((s) => {
-      const key = s.name.trim().toLowerCase();
+      const sName = (s?.name || '').trim();
+      if (!sName) return;
+      const key = sName.toLowerCase();
       workerMap.set(key, {
         staffId: s.id,
-        name: s.name.trim(),
+        name: sName,
         role: s.role || 'Thợ thi công',
         phone: s.phone || '',
         dailyWage: s.dailyWage || 450000,
@@ -366,12 +368,15 @@ export const TimesheetView: React.FC<TimesheetViewProps> = ({
   const filteredWorkers = useMemo(() => {
     return monthlyData.workers.filter((w) => {
       if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
+      const wName = (w?.name || '').toLowerCase();
+      const wRole = (w?.role || '').toLowerCase();
+      const wPhone = w?.phone || '';
       return (
-        w.name.toLowerCase().includes(q) ||
-        w.role.toLowerCase().includes(q) ||
-        w.phone.includes(q) ||
-        w.projectsWorked.some((p) => p.toLowerCase().includes(q))
+        wName.includes(q) ||
+        wRole.includes(q) ||
+        wPhone.includes(q) ||
+        (w.projectsWorked && w.projectsWorked.some((p) => (p || '').toLowerCase().includes(q)))
       );
     });
   }, [monthlyData.workers, searchQuery]);
@@ -469,7 +474,8 @@ export const TimesheetView: React.FC<TimesheetViewProps> = ({
   // Find corresponding registered StaffMember for modal opening
   const handleWorkerClick = (w: WorkerMonthlySummary) => {
     if (onOpenStaffDetail) {
-      const registered = staff.find((s) => s.id === w.staffId || s.name.trim().toLowerCase() === w.name.trim().toLowerCase());
+      const targetName = (w?.name || '').trim().toLowerCase();
+      const registered = staff.find((s) => s.id === w.staffId || (s?.name && s.name.trim().toLowerCase() === targetName));
       if (registered) {
         onOpenStaffDetail(registered);
       } else {

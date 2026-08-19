@@ -555,7 +555,7 @@ function cleanNumeric(val: any): number {
  * Helper to normalize string lookup keys
  */
 function normalizeKey(key: string): string {
-  return key
+  return (key || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -584,9 +584,9 @@ export async function parseAndValidateMaterialsExcel(
         const existingCodesMap = new Map<string, MaterialItem>();
         const existingNamesMap = new Map<string, MaterialItem>();
 
-        existingMaterials.forEach((m) => {
-          if (m.code) existingCodesMap.set(m.code.trim().toLowerCase(), m);
-          if (m.name) existingNamesMap.set(m.name.trim().toLowerCase(), m);
+        (existingMaterials || []).forEach((m) => {
+          if (m?.code) existingCodesMap.set(m.code.trim().toLowerCase(), m);
+          if (m?.name) existingNamesMap.set(m.name.trim().toLowerCase(), m);
         });
 
         const seenCodesInFile = new Set<string>();

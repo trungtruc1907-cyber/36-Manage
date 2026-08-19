@@ -305,15 +305,17 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
       resultList = [...importedItems];
     } else if (strategy === 'addOnly') {
       const existingCodes = new Set(
-        materials.map((m) => m.code?.trim().toLowerCase()).filter(Boolean)
+        materials.map((m) => (m.code || '').trim().toLowerCase()).filter(Boolean)
       );
       const existingNames = new Set(
-        materials.map((m) => m.name.trim().toLowerCase()).filter(Boolean)
+        materials.map((m) => (m.name || '').trim().toLowerCase()).filter(Boolean)
       );
 
       const newItems = importedItems.filter((item) => {
-        const hasCode = item.code && existingCodes.has(item.code.trim().toLowerCase());
-        const hasName = existingNames.has(item.name.trim().toLowerCase());
+        const itemCodeKey = (item.code || '').trim().toLowerCase();
+        const itemNameKey = (item.name || '').trim().toLowerCase();
+        const hasCode = itemCodeKey && existingCodes.has(itemCodeKey);
+        const hasName = itemNameKey && existingNames.has(itemNameKey);
         return !hasCode && !hasName;
       });
 
@@ -333,8 +335,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
       const appendedItems: MaterialItem[] = [];
 
       importedItems.forEach((item) => {
-        const codeKey = item.code?.trim().toLowerCase();
-        const nameKey = item.name.trim().toLowerCase();
+        const codeKey = (item.code || '').trim().toLowerCase();
+        const nameKey = (item.name || '').trim().toLowerCase();
         const matchedId = (codeKey && codeToIdMap.get(codeKey)) || nameToIdMap.get(nameKey);
 
         if (matchedId && existingMap.has(matchedId)) {
@@ -496,8 +498,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
 
   // Helper to find export history for a specific material
   const getMaterialExportHistory = (matName: string) => {
+    const targetName = (matName || '').toLowerCase();
+    if (!targetName) return [];
     return exportedGoods.filter(
-      (e) => e.materialName && e.materialName.toLowerCase() === matName.toLowerCase()
+      (e) => e.materialName && e.materialName.toLowerCase() === targetName
     );
   };
 
@@ -508,13 +512,19 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     return exportedGoods
       .filter((exp) => {
         const search = exportSearchTerm.toLowerCase().trim();
+        const eMatName = (exp.materialName || '').toLowerCase();
+        const eProjName = (exp.projectName || '').toLowerCase();
+        const eRecipient = (exp.recipient || '').toLowerCase();
+        const eExportedBy = (exp.exportedBy || '').toLowerCase();
+        const eNotes = (exp.notes || '').toLowerCase();
+
         const matchesSearch =
           !search ||
-          exp.materialName.toLowerCase().includes(search) ||
-          exp.projectName.toLowerCase().includes(search) ||
-          (exp.recipient && exp.recipient.toLowerCase().includes(search)) ||
-          (exp.exportedBy && exp.exportedBy.toLowerCase().includes(search)) ||
-          (exp.notes && exp.notes.toLowerCase().includes(search)) ||
+          eMatName.includes(search) ||
+          eProjName.includes(search) ||
+          eRecipient.includes(search) ||
+          eExportedBy.includes(search) ||
+          eNotes.includes(search) ||
           (exp.date && exp.date.includes(search));
 
         const matchesProject =
@@ -626,7 +636,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
 
     // Find matched material code if available
     let materialCode = editingExport.materialCode;
-    const matchedMat = materials.find((m) => m.name.toLowerCase() === exportFormMaterialName.toLowerCase());
+    const formMatName = (exportFormMaterialName || '').toLowerCase();
+    const matchedMat = materials.find((m) => (m.name || '').toLowerCase() === formMatName);
     if (matchedMat) {
       materialCode = matchedMat.code;
     }
@@ -1875,7 +1886,8 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                       const newName = e.target.value;
                       setExportFormMaterialName(newName);
                       // Auto-fill unit & price if matched
-                      const matched = materials.find((m) => m.name.toLowerCase() === newName.toLowerCase());
+                      const targetName = (newName || '').trim().toLowerCase();
+                      const matched = materials.find((m) => (m.name || '').trim().toLowerCase() === targetName);
                       if (matched) {
                         setExportFormUnit(matched.unit || 'Bộ');
                         const price = matched.price || matched.defaultPrice || 0;

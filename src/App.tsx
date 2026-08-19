@@ -10,7 +10,6 @@ import {
   LogOut,
   ChevronDown,
   Building2,
-  Layers,
   Sparkles,
 } from 'lucide-react';
 import {
@@ -20,7 +19,6 @@ import {
   INITIAL_MATERIALS,
   INITIAL_PROJECTS,
   INITIAL_STAFF,
-  INITIAL_TENANTS,
 } from './data/mockData';
 import {
   CompanySettings,
@@ -29,15 +27,13 @@ import {
   LaborDailyLog,
   MaterialItem,
   StaffMember,
-  TenantOrganization,
   UserAccount,
   UserAccountRecord,
   LoginHistoryRecord,
   ActivityLog,
 } from './types';
 import {
-  testFirestoreConnection,
-  subscribeTenants,
+  testDatabaseConnection,
   subscribeProjects,
   subscribeMaterials,
   subscribeExportedGoods,
@@ -51,30 +47,27 @@ import {
   clearLoginHistoryFromDatabase,
   recordActivityLogToDatabase,
   clearActivityLogsFromDatabase,
-  saveCompanySettingsToFirestore,
+  saveCompanySettingsToDatabase,
   saveUserAccountToDatabase,
   deleteUserAccountFromDatabase,
-  addProjectToFirestore,
-  updateProjectInFirestore,
-  deleteProjectFromFirestore,
-  addMaterialToFirestore,
-  updateMaterialInFirestore,
-  batchSaveMaterialsToFirestore,
-  deleteMaterialFromFirestore,
-  addExportedGoodToFirestore,
-  updateExportedGoodInFirestore,
-  deleteExportedGoodFromFirestore,
-  addLaborLogToFirestore,
-  updateLaborLogToFirestore,
-  deleteLaborLogFromFirestore,
-  addStaffToFirestore,
-  deleteStaffFromFirestore,
+  addProjectToDatabase,
+  updateProjectInDatabase,
+  deleteProjectFromDatabase,
+  addMaterialToDatabase,
+  updateMaterialInDatabase,
+  batchSaveMaterialsToDatabase,
+  deleteMaterialFromDatabase,
+  addExportedGoodToDatabase,
+  updateExportedGoodInDatabase,
+  deleteExportedGoodFromDatabase,
+  addLaborLogToDatabase,
+  updateLaborLogToDatabase,
+  deleteLaborLogFromDatabase,
+  addStaffToDatabase,
+  deleteStaffFromDatabase,
   clearAllDatabaseData,
-  purgeAllDemoDataFromDatabase,
-  seedSampleDataToFirestore,
-  initializeMultiTenantArchitecture,
-  registerNewTenantWithDatabase,
-  DEFAULT_TENANT_ID,
+  seedSampleDataToDatabase,
+  initializeDatabaseArchitecture,
   INITIAL_USER_ACCOUNTS,
 } from './firebase';
 import { LoginScreen } from './components/LoginScreen';
@@ -92,12 +85,6 @@ import { ActivityLogsModal } from './components/ActivityLogsModal';
 import { normalizeDateToDDMMYYYY } from './utils/dateUtils';
 
 export default function App() {
-  // Multi-Tenant State
-  const [tenants, setTenants] = useState<TenantOrganization[]>(INITIAL_TENANTS);
-  const [activeTenantId, setActiveTenantId] = useState<string>(() => {
-    return localStorage.getItem('chongtham36_active_tenant_id') || DEFAULT_TENANT_ID;
-  });
-
   // Authentication state - restore remember-me session if present, else null
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     const savedUser = localStorage.getItem('chongtham36_active_user');
@@ -114,7 +101,7 @@ export default function App() {
   // System user accounts list
   const [accounts, setAccounts] = useState<UserAccountRecord[]>(INITIAL_USER_ACCOUNTS);
 
-  // Login Activity History list from Firestore
+  // Login Activity History list from Realtime Database
   const [loginHistory, setLoginHistory] = useState<LoginHistoryRecord[]>([]);
 
   // Application User Activity / Audit Logs from Realtime Database
@@ -127,7 +114,7 @@ export default function App() {
   // Mobile sidebar drawer state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Core business data states - scoped by active tenant
+  // Core business data states - Standalone Single Database
   const [exportedGoods, setExportedGoods] = useState<ExportedGood[]>([]);
   const [laborLogs, setLaborLogs] = useState<LaborDailyLog[]>([]);
   const [projects, setProjects] = useState<ConstructionProject[]>([]);
@@ -166,77 +153,49 @@ export default function App() {
     }, 3200);
   };
 
-  // Switch Active Tenant
-  const handleSelectTenant = (tenantId: string) => {
-    // Check user permission if logged in
-    if (currentUser) {
-      const isSuperAdmin =
-        currentUser.username.toLowerCase() === 'admin' &&
-        (currentUser.orgId?.toUpperCase() === 'CT36' || currentUser.allowedTenants?.includes('*'));
-
-      if (!isSuperAdmin) {
-        const targetTenant = tenants.find((t) => t.id === tenantId);
-        const targetCode = targetTenant?.code?.toUpperCase();
-        const userOrg = (currentUser.orgId || '').toUpperCase();
-        const allowedList = currentUser.allowedTenants || [];
-
-        const isAllowed =
-          tenantId === currentUser.createdTenantId ||
-          userOrg === targetCode ||
-          allowedList.includes(tenantId) ||
-          (targetCode && allowedList.includes(targetCode));
-
-        if (!isAllowed) {
-          showToast(
-            `⛔ Bạn không có quyền truy cập vào doanh nghiệp "${targetTenant?.name || tenantId}". Tài khoản của bạn chỉ thuộc về ${currentUser.orgName || currentUser.orgId}!`
-          );
-          return;
-        }
-      }
-    }
-
-    setActiveTenantId(tenantId);
-    localStorage.setItem('chongtham36_active_tenant_id', tenantId);
-
-    // Update companySettings preview according to tenant
-    const selectedTenant = tenants.find((t) => t.id === tenantId);
-    if (selectedTenant) {
-      setCompanySettings((prev) => ({
-        ...prev,
-        tenantId: selectedTenant.id,
-        orgId: selectedTenant.code,
-        orgName: selectedTenant.name,
-        brandName: selectedTenant.brandName || selectedTenant.name,
-        phone: selectedTenant.phone || prev.phone,
-        email: selectedTenant.email || prev.email,
-        address: selectedTenant.address || prev.address,
-        tagline: selectedTenant.tagline || prev.tagline,
-      }));
-    }
-  };
-
-  // Initialize Multi-Tenant Architecture & Test Connection once on mount
+  // Initialize Database Architecture & Test Connection on mount
   useEffect(() => {
-    testFirestoreConnection().then((connected) => {
+    testDatabaseConnection().then((connected) => {
       setIsFirebaseConnected(connected);
     });
 
-    initializeMultiTenantArchitecture();
+    initializeDatabaseArchitecture();
 
-    // Subscribe to all available tenants list
-    const unsubTenants = subscribeTenants((data) => {
-      if (data && data.length > 0) {
-        setTenants(data);
+    // Standalone Subscriptions
+    const unsubProjects = subscribeProjects((data) => {
+      setProjects(data || []);
+    });
+
+    const unsubMaterials = subscribeMaterials((data) => {
+      setMaterials(data || []);
+    });
+
+    const unsubExports = subscribeExportedGoods((data) => {
+      setExportedGoods(data || []);
+    });
+
+    const unsubLabor = subscribeLaborLogs((data) => {
+      setLaborLogs(data || []);
+    });
+
+    const unsubStaff = subscribeStaff((data) => {
+      setStaff(data || []);
+    });
+
+    const unsubCompanySettings = subscribeCompanySettings((data) => {
+      if (data) {
+        setCompanySettings(data);
+        localStorage.setItem('chongtham36_company_settings', JSON.stringify(data));
       }
     });
 
-    // Global Accounts & Login History subscriptions
     const unsubAccounts = subscribeUserAccounts((data) => {
       if (data && data.length > 0) {
         setAccounts(data);
         setCurrentUser((curr) => {
           if (!curr) return null;
-          const fresh = data.find((a) => a.username.toLowerCase() === curr.username.toLowerCase());
+          const currentUName = (curr?.username || '').toLowerCase();
+          const fresh = data.find((a) => (a?.username || '').toLowerCase() === currentUName);
           if (fresh) {
             const updated = {
               ...curr,
@@ -262,50 +221,11 @@ export default function App() {
       }
     });
 
-    return () => {
-      unsubTenants();
-      unsubAccounts();
-      unsubLoginHistory();
-    };
-  }, []);
-
-  // Multi-Tenant Scoped Subscriptions: Re-subscribe whenever activeTenantId changes
-  useEffect(() => {
-    if (!activeTenantId) return;
-
-    // Subscribe to tenant-scoped collections in real-time
-    const unsubProjects = subscribeProjects((data) => {
-      setProjects(data || []);
-    }, activeTenantId);
-
-    const unsubMaterials = subscribeMaterials((data) => {
-      setMaterials(data || []);
-    }, activeTenantId);
-
-    const unsubExports = subscribeExportedGoods((data) => {
-      setExportedGoods(data || []);
-    }, activeTenantId);
-
-    const unsubLabor = subscribeLaborLogs((data) => {
-      setLaborLogs(data || []);
-    }, activeTenantId);
-
-    const unsubStaff = subscribeStaff((data) => {
-      setStaff(data || []);
-    }, activeTenantId);
-
-    const unsubCompanySettings = subscribeCompanySettings((data) => {
-      if (data) {
-        setCompanySettings(data);
-        localStorage.setItem('chongtham36_company_settings', JSON.stringify(data));
-      }
-    }, activeTenantId);
-
     const unsubActivityLogs = subscribeActivityLogs((data) => {
       if (data) {
         setActivityLogs(data);
       }
-    }, activeTenantId);
+    });
 
     return () => {
       unsubProjects();
@@ -314,11 +234,13 @@ export default function App() {
       unsubLabor();
       unsubStaff();
       unsubCompanySettings();
+      unsubAccounts();
+      unsubLoginHistory();
       unsubActivityLogs();
     };
-  }, [activeTenantId]);
+  }, []);
 
-  // Helper to record user activities to Realtime Database scoped by active tenant
+  // Helper to record user activities to Realtime Database
   const logUserAction = async (
     category: 'project' | 'export' | 'labor' | 'material' | 'staff' | 'auth' | 'settings',
     action: string,
@@ -336,46 +258,33 @@ export default function App() {
       description,
       userName: currentUser?.name || 'Quản Trị Viên (Admin)',
       userRole: currentUser?.role || 'admin',
-      tenantId: activeTenantId,
       timestamp: Date.now(),
       timeFormatted,
       status: 'success',
     };
 
     setActivityLogs((prev) => [newLog, ...prev]);
-    await recordActivityLogToDatabase(newLog, activeTenantId);
+    await recordActivityLogToDatabase(newLog);
   };
 
   const handleClearActivityLogs = async () => {
-    await clearActivityLogsFromDatabase(activeTenantId);
+    await clearActivityLogsFromDatabase();
     setActivityLogs([]);
-    showToast('Đã xóa toàn bộ lịch sử thao tác của đơn vị hiện tại trên Realtime Database!');
+    showToast('Đã xóa toàn bộ lịch sử thao tác trên cơ sở dữ liệu!');
   };
 
   // Handlers
   const handleUpdateCompanySettings = async (newSettings: CompanySettings) => {
-    const scopedSettings: CompanySettings = {
-      ...newSettings,
-      tenantId: activeTenantId,
-    };
-    setCompanySettings(scopedSettings);
-    localStorage.setItem('chongtham36_company_settings', JSON.stringify(scopedSettings));
-    await saveCompanySettingsToFirestore(scopedSettings, activeTenantId);
-    await logUserAction('settings', 'Cập nhật cấu hình', 'Thiết lập doanh nghiệp', `Cập nhật thông tin chi nhánh ${scopedSettings.brandName} (${scopedSettings.orgName})`);
+    setCompanySettings(newSettings);
+    localStorage.setItem('chongtham36_company_settings', JSON.stringify(newSettings));
+    await saveCompanySettingsToDatabase(newSettings);
+    await logUserAction('settings', 'Cập nhật cấu hình', 'Thiết lập doanh nghiệp', `Cập nhật thông tin ${newSettings.brandName} (${newSettings.orgName})`);
     showToast('Đã lưu cấu hình doanh nghiệp và logo thành công!');
   };
 
   const handleLoginSuccess = async (user: UserAccount) => {
     setCurrentUser(user);
     setActiveTab('dashboard');
-
-    // If user's org matches a tenant, switch to it automatically
-    const matchedTenant = tenants.find(
-      (t) => t.code.toUpperCase() === user.orgId.toUpperCase() || t.id === user.orgId
-    );
-    if (matchedTenant) {
-      handleSelectTenant(matchedTenant.id);
-    }
 
     // Format device / browser info
     const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Web Browser';
@@ -403,8 +312,8 @@ export default function App() {
 
     // Save login log to Firebase Realtime Database
     await recordLoginHistoryToDatabase(loginRecord);
-    await logUserAction('auth', 'Đăng nhập', `Đăng nhập (${user.username})`, `Tài khoản ${user.name} (${user.role}) đăng nhập thành công vào ${user.orgId}`);
-    showToast(`Chào mừng ${user.name} - Đăng nhập ${user.orgId} thành công!`);
+    await logUserAction('auth', 'Đăng nhập', `Đăng nhập (${user.username})`, `Tài khoản ${user.name} (${user.role}) đăng nhập thành công`);
+    showToast(`Chào mừng ${user.name} - Đăng nhập thành công!`);
   };
 
   const handleLogout = () => {
@@ -425,38 +334,6 @@ export default function App() {
     await saveUserAccountToDatabase(newAccount);
     await logUserAction('auth', 'Tạo tài khoản', newAccount.username, `Tạo mới tài khoản "${newAccount.name}" với vai trò ${newAccount.role}`);
     showToast(`Đã tạo tài khoản "${newAccount.name}" (${newAccount.username}) thành công!`);
-  };
-
-  const handleRegisterNewEnterprise = async (
-    tenantData: {
-      code: string;
-      name: string;
-      brandName?: string;
-      tagline?: string;
-      phone?: string;
-      email?: string;
-      address?: string;
-      taxCode?: string;
-      customLogoUrl?: string | null;
-    },
-    accountData: {
-      username: string;
-      password?: string;
-      name: string;
-      phone?: string;
-      email?: string;
-    }
-  ) => {
-    const result = await registerNewTenantWithDatabase(tenantData, accountData);
-    setTenants((prev) => {
-      const exists = prev.some((t) => t.id === result.tenant.id);
-      return exists ? prev.map((t) => (t.id === result.tenant.id ? result.tenant : t)) : [...prev, result.tenant];
-    });
-    setAccounts((prev) => [...prev.filter((a) => a.username !== result.user.username), result.user]);
-    setActiveTenantId(result.tenant.id);
-    localStorage.setItem('chongtham36_active_tenant_id', result.tenant.id);
-    showToast(`Đã khởi tạo thành công không gian dữ liệu riêng cho Doanh nghiệp ${result.tenant.name} (${result.tenant.code})!`);
-    return result;
   };
 
   const handleSaveAccount = async (account: UserAccountRecord) => {
@@ -480,7 +357,6 @@ export default function App() {
     
     const scopedProject: ConstructionProject = {
       ...proj,
-      tenantId: activeTenantId,
       createdAt: proj.createdAt || existingProj?.createdAt || now.toISOString(),
       createdAtTimestamp: proj.createdAtTimestamp || existingProj?.createdAtTimestamp || Date.now(),
       updatedAt: now.toISOString(),
@@ -488,138 +364,119 @@ export default function App() {
 
     if (isExisting) {
       setProjects((prev) => prev.map((p) => (p.id === scopedProject.id ? scopedProject : p)));
-      await updateProjectInFirestore(scopedProject, activeTenantId);
+      await updateProjectInDatabase(scopedProject);
       await logUserAction('project', 'Cập nhật công trình', scopedProject.name, `Cập nhật thông tin công trình ${scopedProject.code} - ${scopedProject.name}, đối tác: ${scopedProject.partner || 'Chủ đầu tư'}`);
-      showToast(`Đã cập nhật công trình "${scopedProject.name}" lên Realtime Database`);
+      showToast(`Đã cập nhật công trình "${scopedProject.name}" lên cơ sở dữ liệu`);
     } else {
       setProjects((prev) => [scopedProject, ...prev]);
-      await addProjectToFirestore(scopedProject, activeTenantId);
+      await addProjectToDatabase(scopedProject);
       await logUserAction('project', 'Tạo công trình', scopedProject.name, `Khởi tạo công trình mới ${scopedProject.code} - ${scopedProject.name}, địa chỉ: ${scopedProject.address}`);
-      showToast(`Đã lưu công trình mới "${scopedProject.name}" lên Realtime Database`);
+      showToast(`Đã lưu công trình mới "${scopedProject.name}" lên cơ sở dữ liệu`);
     }
   };
 
   const handleDeleteProject = async (projectId: string) => {
     const deletedProj = projects.find((p) => p.id === projectId);
     setProjects((prev) => prev.filter((p) => p.id !== projectId));
-    await deleteProjectFromFirestore(projectId, activeTenantId);
+    await deleteProjectFromDatabase(projectId);
     await logUserAction('project', 'Xóa công trình', deletedProj?.name || projectId, `Đã xóa công trình ${deletedProj ? `${deletedProj.code} - ${deletedProj.name}` : projectId}`);
-    showToast('Đã xóa công trình khỏi Realtime Database');
+    showToast('Đã xóa công trình khỏi cơ sở dữ liệu');
   };
 
   const handleAddMaterial = async (newMat: MaterialItem) => {
-    const scopedMat: MaterialItem = {
-      ...newMat,
-      tenantId: activeTenantId,
-    };
-    setMaterials((prev) => [scopedMat, ...prev]);
-    await addMaterialToFirestore(scopedMat, activeTenantId);
-    await logUserAction('material', 'Thêm vật tư', scopedMat.name, `Thêm mới mặt hàng ${scopedMat.code} - ${scopedMat.name}, tồn kho: ${scopedMat.stockQty} ${scopedMat.unit}`);
-    showToast(`Đã lưu vật tư "${scopedMat.name}" lên Realtime Database`);
+    setMaterials((prev) => [newMat, ...prev]);
+    await addMaterialToDatabase(newMat);
+    await logUserAction('material', 'Thêm vật tư', newMat.name, `Thêm mới mặt hàng ${newMat.code} - ${newMat.name}, tồn kho: ${newMat.stockQty} ${newMat.unit}`);
+    showToast(`Đã lưu vật tư "${newMat.name}" lên cơ sở dữ liệu`);
   };
 
   const handleUpdateMaterial = async (updatedMat: MaterialItem) => {
-    const scopedMat: MaterialItem = {
-      ...updatedMat,
-      tenantId: activeTenantId,
-    };
-    setMaterials((prev) => prev.map((m) => (m.id === scopedMat.id ? scopedMat : m)));
-    await updateMaterialInFirestore(scopedMat, activeTenantId);
-    await logUserAction('material', 'Cập nhật vật tư', scopedMat.name, `Cập nhật thông tin hàng hóa ${scopedMat.code} - ${scopedMat.name}, giá bán: ${new Intl.NumberFormat('vi-VN').format(scopedMat.price || scopedMat.defaultPrice)} đ`);
-    showToast(`Đã cập nhật vật tư "${scopedMat.name}" trên Realtime Database`);
+    setMaterials((prev) => prev.map((m) => (m.id === updatedMat.id ? updatedMat : m)));
+    await updateMaterialInDatabase(updatedMat);
+    await logUserAction('material', 'Cập nhật vật tư', updatedMat.name, `Cập nhật thông tin hàng hóa ${updatedMat.code} - ${updatedMat.name}`);
+    showToast(`Đã cập nhật vật tư "${updatedMat.name}" trên cơ sở dữ liệu`);
   };
 
   const handleBatchSaveMaterials = async (newMaterialsList: MaterialItem[]) => {
-    const scopedList = newMaterialsList.map((m) => ({ ...m, tenantId: activeTenantId }));
-    setMaterials(scopedList);
-    await batchSaveMaterialsToFirestore(scopedList, activeTenantId);
-    await logUserAction('material', 'Đồng bộ vật tư', 'Nhập danh mục', `Đã đồng bộ ${scopedList.length} mặt hàng vào danh mục kho`);
-    showToast(`Đã đồng bộ ${scopedList.length} mặt hàng lên Realtime Database`);
+    setMaterials(newMaterialsList);
+    await batchSaveMaterialsToDatabase(newMaterialsList);
+    await logUserAction('material', 'Đồng bộ vật tư', 'Nhập danh mục', `Đã đồng bộ ${newMaterialsList.length} mặt hàng vào danh mục kho`);
+    showToast(`Đã đồng bộ ${newMaterialsList.length} mặt hàng lên cơ sở dữ liệu`);
   };
 
   const handleDeleteMaterial = async (materialId: string) => {
     const deletedMat = materials.find((m) => m.id === materialId);
     setMaterials((prev) => prev.filter((m) => m.id !== materialId));
-    await deleteMaterialFromFirestore(materialId, activeTenantId);
+    await deleteMaterialFromDatabase(materialId);
     await logUserAction('material', 'Xóa vật tư', deletedMat?.name || materialId, `Đã xóa mặt hàng ${deletedMat ? `${deletedMat.code} - ${deletedMat.name}` : materialId} khỏi kho`);
-    showToast('Đã xóa vật tư khỏi Realtime Database');
+    showToast('Đã xóa vật tư khỏi cơ sở dữ liệu');
   };
 
   const handleAddExport = async (newExp: ExportedGood) => {
-    const scopedExp: ExportedGood = {
-      ...newExp,
-      tenantId: activeTenantId,
-    };
-
     // 1. Add export record
-    setExportedGoods((prev) => [scopedExp, ...prev]);
-    await addExportedGoodToFirestore(scopedExp, activeTenantId);
+    setExportedGoods((prev) => [newExp, ...prev]);
+    await addExportedGoodToDatabase(newExp);
 
     // 2. Deduct material stock in Database
-    const targetMat = materials.find((m) => m.name === scopedExp.materialName);
+    const targetMat = materials.find((m) => m.name === newExp.materialName);
     if (targetMat) {
       const updatedMat: MaterialItem = {
         ...targetMat,
-        stockQty: Math.max(0, targetMat.stockQty - scopedExp.quantity),
-        tenantId: activeTenantId,
+        stockQty: Math.max(0, targetMat.stockQty - newExp.quantity),
       };
       setMaterials((prev) => prev.map((m) => (m.id === targetMat.id ? updatedMat : m)));
-      await addMaterialToFirestore(updatedMat, activeTenantId);
+      await addMaterialToDatabase(updatedMat);
     }
 
     // 3. Update project totalExportsValue in Database
-    const targetProj = projects.find((p) => p.name === scopedExp.projectName);
+    const targetProj = projects.find((p) => p.name === newExp.projectName);
     if (targetProj) {
       const updatedProj: ConstructionProject = {
         ...targetProj,
-        totalExportsValue: targetProj.totalExportsValue + scopedExp.totalPrice,
-        tenantId: activeTenantId,
+        totalExportsValue: targetProj.totalExportsValue + newExp.totalPrice,
       };
       setProjects((prev) => prev.map((p) => (p.id === targetProj.id ? updatedProj : p)));
-      await addProjectToFirestore(updatedProj, activeTenantId);
+      await addProjectToDatabase(updatedProj);
     }
 
     await logUserAction(
       'export',
       'Xuất kho',
-      scopedExp.materialName,
-      `Xuất ${scopedExp.quantity} ${scopedExp.unit} "${scopedExp.materialName}" cho công trình "${scopedExp.projectName}" (Trị giá: ${new Intl.NumberFormat('vi-VN').format(scopedExp.totalPrice)} đ, người nhận: ${scopedExp.recipient})`
+      newExp.materialName,
+      `Xuất ${newExp.quantity} ${newExp.unit} "${newExp.materialName}" cho công trình "${newExp.projectName}" (Trị giá: ${new Intl.NumberFormat('vi-VN').format(newExp.totalPrice)} đ, người nhận: ${newExp.recipient})`
     );
-    showToast(`Đã lưu phiếu xuất "${scopedExp.materialName}" và đồng bộ kho & công trình lên Realtime Database`);
+    showToast(`Đã lưu phiếu xuất "${newExp.materialName}" và đồng bộ tồn kho`);
   };
 
   const handleAddBatchExport = async (items: ExportedGood[]) => {
     if (!items || items.length === 0) return;
 
-    const scopedItems = items.map((it) => ({ ...it, tenantId: activeTenantId }));
-
     // 1. Save all export goods
-    setExportedGoods((prev) => [...scopedItems, ...prev]);
-    for (const exp of scopedItems) {
-      await addExportedGoodToFirestore(exp, activeTenantId);
+    setExportedGoods((prev) => [...items, ...prev]);
+    for (const exp of items) {
+      await addExportedGoodToDatabase(exp);
     }
 
     // 2. Deduct stock for each exported material
     let updatedMaterialsList = [...materials];
-    for (const exp of scopedItems) {
+    for (const exp of items) {
       const targetMat = updatedMaterialsList.find((m) => m.name === exp.materialName);
       if (targetMat) {
         const updatedMat: MaterialItem = {
           ...targetMat,
           stockQty: Math.max(0, targetMat.stockQty - exp.quantity),
-          tenantId: activeTenantId,
         };
         updatedMaterialsList = updatedMaterialsList.map((m) =>
           m.id === targetMat.id ? updatedMat : m
         );
-        await addMaterialToFirestore(updatedMat, activeTenantId);
+        await addMaterialToDatabase(updatedMat);
       }
     }
     setMaterials(updatedMaterialsList);
 
     // 3. Update project total exports value
-    const projectName = scopedItems[0]?.projectName;
-    const totalBatchPrice = scopedItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    const projectName = items[0]?.projectName;
+    const totalBatchPrice = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
     if (projectName) {
       const targetProj = projects.find((p) => p.name === projectName);
@@ -627,10 +484,9 @@ export default function App() {
         const updatedProj: ConstructionProject = {
           ...targetProj,
           totalExportsValue: targetProj.totalExportsValue + totalBatchPrice,
-          tenantId: activeTenantId,
         };
         setProjects((prev) => prev.map((p) => (p.id === targetProj.id ? updatedProj : p)));
-        await addProjectToFirestore(updatedProj, activeTenantId);
+        await addProjectToDatabase(updatedProj);
       }
     }
 
@@ -638,38 +494,32 @@ export default function App() {
     await logUserAction(
       'export',
       'Xuất nhiều vật tư',
-      `Phiếu xuất ${scopedItems.length} loại vật tư`,
-      `Xuất ${scopedItems.length} mặt hàng cho công trình "${projectName || 'Chưa gán'}" - Tổng giá trị: ${new Intl.NumberFormat('vi-VN').format(totalBatchPrice)} đ (Người nhận: ${scopedItems[0]?.recipient || 'Đội thi công'})`
+      `Phiếu xuất ${items.length} loại vật tư`,
+      `Xuất ${items.length} mặt hàng cho công trình "${projectName || 'Chưa gán'}" - Tổng giá trị: ${new Intl.NumberFormat('vi-VN').format(totalBatchPrice)} đ (Người nhận: ${items[0]?.recipient || 'Đội thi công'})`
     );
 
-    showToast(`Đã lưu phiếu xuất ${scopedItems.length} loại vật tư và cập nhật tồn kho thành công!`);
+    showToast(`Đã lưu phiếu xuất ${items.length} loại vật tư và cập nhật tồn kho thành công!`);
   };
 
   const handleUpdateExport = async (updatedExp: ExportedGood, originalExp?: ExportedGood) => {
-    const scopedExp: ExportedGood = {
-      ...updatedExp,
-      tenantId: activeTenantId,
-    };
-
     // 1. Update export in state & RTDB
-    setExportedGoods((prev) => prev.map((e) => (e.id === scopedExp.id ? scopedExp : e)));
-    await updateExportedGoodInFirestore(scopedExp, activeTenantId);
+    setExportedGoods((prev) => prev.map((e) => (e.id === updatedExp.id ? updatedExp : e)));
+    await updateExportedGoodInDatabase(updatedExp);
 
     // 2. Stock and project cost adjustments
     if (originalExp) {
       // Material Stock adjustment
-      if (originalExp.materialName === scopedExp.materialName) {
-        const qtyDiff = scopedExp.quantity - originalExp.quantity; // positive means we exported more -> deduct more
+      if (originalExp.materialName === updatedExp.materialName) {
+        const qtyDiff = updatedExp.quantity - originalExp.quantity;
         if (qtyDiff !== 0) {
-          const targetMat = materials.find((m) => m.name === scopedExp.materialName);
+          const targetMat = materials.find((m) => m.name === updatedExp.materialName);
           if (targetMat) {
             const updatedMat: MaterialItem = {
               ...targetMat,
               stockQty: Math.max(0, targetMat.stockQty - qtyDiff),
-              tenantId: activeTenantId,
             };
             setMaterials((prev) => prev.map((m) => (m.id === targetMat.id ? updatedMat : m)));
-            await updateMaterialInFirestore(updatedMat, activeTenantId);
+            await updateMaterialInDatabase(updatedMat);
           }
         }
       } else {
@@ -679,36 +529,33 @@ export default function App() {
           const revertedMat: MaterialItem = {
             ...oldMat,
             stockQty: oldMat.stockQty + originalExp.quantity,
-            tenantId: activeTenantId,
           };
           setMaterials((prev) => prev.map((m) => (m.id === oldMat.id ? revertedMat : m)));
-          await updateMaterialInFirestore(revertedMat, activeTenantId);
+          await updateMaterialInDatabase(revertedMat);
         }
-        const newMat = materials.find((m) => m.name === scopedExp.materialName);
+        const newMat = materials.find((m) => m.name === updatedExp.materialName);
         if (newMat) {
           const deductedMat: MaterialItem = {
             ...newMat,
-            stockQty: Math.max(0, newMat.stockQty - scopedExp.quantity),
-            tenantId: activeTenantId,
+            stockQty: Math.max(0, newMat.stockQty - updatedExp.quantity),
           };
           setMaterials((prev) => prev.map((m) => (m.id === newMat.id ? deductedMat : m)));
-          await updateMaterialInFirestore(deductedMat, activeTenantId);
+          await updateMaterialInDatabase(deductedMat);
         }
       }
 
       // Project Total Value adjustment
-      if (originalExp.projectName === scopedExp.projectName) {
-        const priceDiff = scopedExp.totalPrice - originalExp.totalPrice;
+      if (originalExp.projectName === updatedExp.projectName) {
+        const priceDiff = updatedExp.totalPrice - originalExp.totalPrice;
         if (priceDiff !== 0) {
-          const targetProj = projects.find((p) => p.name === scopedExp.projectName);
+          const targetProj = projects.find((p) => p.name === updatedExp.projectName);
           if (targetProj) {
             const updatedProj: ConstructionProject = {
               ...targetProj,
               totalExportsValue: Math.max(0, targetProj.totalExportsValue + priceDiff),
-              tenantId: activeTenantId,
             };
             setProjects((prev) => prev.map((p) => (p.id === targetProj.id ? updatedProj : p)));
-            await updateProjectInFirestore(updatedProj, activeTenantId);
+            await updateProjectInDatabase(updatedProj);
           }
         }
       } else {
@@ -718,20 +565,18 @@ export default function App() {
           const updatedOldProj: ConstructionProject = {
             ...oldProj,
             totalExportsValue: Math.max(0, oldProj.totalExportsValue - originalExp.totalPrice),
-            tenantId: activeTenantId,
           };
           setProjects((prev) => prev.map((p) => (p.id === oldProj.id ? updatedOldProj : p)));
-          await updateProjectInFirestore(updatedOldProj, activeTenantId);
+          await updateProjectInDatabase(updatedOldProj);
         }
-        const newProj = projects.find((p) => p.name === scopedExp.projectName);
+        const newProj = projects.find((p) => p.name === updatedExp.projectName);
         if (newProj) {
           const updatedNewProj: ConstructionProject = {
             ...newProj,
-            totalExportsValue: newProj.totalExportsValue + scopedExp.totalPrice,
-            tenantId: activeTenantId,
+            totalExportsValue: newProj.totalExportsValue + updatedExp.totalPrice,
           };
           setProjects((prev) => prev.map((p) => (p.id === newProj.id ? updatedNewProj : p)));
-          await updateProjectInFirestore(updatedNewProj, activeTenantId);
+          await updateProjectInDatabase(updatedNewProj);
         }
       }
     }
@@ -739,10 +584,10 @@ export default function App() {
     await logUserAction(
       'export',
       'Sửa phiếu xuất',
-      scopedExp.materialName,
-      `Cập nhật phiếu xuất "${scopedExp.materialName}" (${scopedExp.quantity} ${scopedExp.unit}) cho công trình "${scopedExp.projectName}"`
+      updatedExp.materialName,
+      `Cập nhật phiếu xuất "${updatedExp.materialName}" (${updatedExp.quantity} ${updatedExp.unit}) cho công trình "${updatedExp.projectName}"`
     );
-    showToast(`Đã cập nhật phiếu xuất kho "${scopedExp.materialName}" thành công!`);
+    showToast(`Đã cập nhật phiếu xuất kho "${updatedExp.materialName}" thành công!`);
   };
 
   const handleDeleteExport = async (exportId: string) => {
@@ -750,7 +595,7 @@ export default function App() {
     if (!targetExp) return;
 
     setExportedGoods((prev) => prev.filter((e) => e.id !== exportId));
-    await deleteExportedGoodFromFirestore(exportId, activeTenantId);
+    await deleteExportedGoodFromDatabase(exportId);
 
     // Restore material stock
     const targetMat = materials.find((m) => m.name === targetExp.materialName);
@@ -758,10 +603,9 @@ export default function App() {
       const restoredMat: MaterialItem = {
         ...targetMat,
         stockQty: targetMat.stockQty + targetExp.quantity,
-        tenantId: activeTenantId,
       };
       setMaterials((prev) => prev.map((m) => (m.id === targetMat.id ? restoredMat : m)));
-      await updateMaterialInFirestore(restoredMat, activeTenantId);
+      await updateMaterialInDatabase(restoredMat);
     }
 
     // Deduct project totalExportsValue
@@ -770,10 +614,9 @@ export default function App() {
       const updatedProj: ConstructionProject = {
         ...targetProj,
         totalExportsValue: Math.max(0, targetProj.totalExportsValue - targetExp.totalPrice),
-        tenantId: activeTenantId,
       };
       setProjects((prev) => prev.map((p) => (p.id === targetProj.id ? updatedProj : p)));
-      await updateProjectInFirestore(updatedProj, activeTenantId);
+      await updateProjectInDatabase(updatedProj);
     }
 
     await logUserAction(
@@ -790,11 +633,10 @@ export default function App() {
     const scopedLog: LaborDailyLog = {
       ...newLog,
       date: formattedDate,
-      tenantId: activeTenantId,
     };
 
     setLaborLogs((prev) => [...prev, scopedLog]);
-    await addLaborLogToFirestore(scopedLog, activeTenantId);
+    await addLaborLogToDatabase(scopedLog);
 
     // Update workdaysLogged on the relevant project if project is specified
     if (scopedLog.projectName) {
@@ -803,10 +645,9 @@ export default function App() {
         const updatedProj: ConstructionProject = {
           ...targetProj,
           workdaysLogged: targetProj.workdaysLogged + scopedLog.totalWorkdays,
-          tenantId: activeTenantId,
         };
         setProjects((prev) => prev.map((p) => (p.id === targetProj.id ? updatedProj : p)));
-        await addProjectToFirestore(updatedProj, activeTenantId);
+        await addProjectToDatabase(updatedProj);
       }
     }
 
@@ -816,7 +657,7 @@ export default function App() {
       `Chấm công ${scopedLog.date}`,
       `Ghi nhận ${scopedLog.totalWorkdays} công tại công trình "${scopedLog.projectName || 'Chung'}" (${scopedLog.workerNames?.join(', ') || 'Đội thi công'})`
     );
-    showToast(`Đã lưu nhật ký chấm công ${scopedLog.date} lên Realtime Database`);
+    showToast(`Đã lưu nhật ký chấm công ${scopedLog.date} lên cơ sở dữ liệu`);
   };
 
   const handleUpdateLaborLog = async (updatedLog: LaborDailyLog) => {
@@ -824,70 +665,62 @@ export default function App() {
     const scopedLog: LaborDailyLog = {
       ...updatedLog,
       date: formattedDate,
-      tenantId: activeTenantId,
     };
     setLaborLogs((prev) => prev.map((l) => (l.id === scopedLog.id ? scopedLog : l)));
-    await updateLaborLogToFirestore(scopedLog, activeTenantId);
+    await updateLaborLogToDatabase(scopedLog);
     await logUserAction(
       'labor',
       'Sửa chấm công',
       `Sửa công ngày ${scopedLog.date}`,
       `Cập nhật số công của ${scopedLog.workerNames?.join(', ') || 'Nhân sự'} thành ${scopedLog.totalWorkdays} công (${scopedLog.projectName || 'Công trình'})`
     );
-    showToast(`Đã cập nhật dữ liệu chấm công ngày ${scopedLog.date} trên Realtime Database`);
+    showToast(`Đã cập nhật dữ liệu chấm công ngày ${scopedLog.date} trên cơ sở dữ liệu`);
   };
 
   const handleDeleteLaborLog = async (logId: string) => {
     const targetLog = laborLogs.find((l) => l.id === logId);
     setLaborLogs((prev) => prev.filter((l) => l.id !== logId));
-    await deleteLaborLogFromFirestore(logId, activeTenantId);
+    await deleteLaborLogFromDatabase(logId);
     await logUserAction(
       'labor',
       'Xóa chấm công',
       `Xóa công ngày ${targetLog?.date || logId}`,
       `Đã xóa bản ghi chấm công của ${targetLog?.workerNames?.join(', ') || 'Nhân sự'} tại ${targetLog?.projectName || 'Công trình'}`
     );
-    showToast('Đã xóa bản ghi chấm công khỏi Realtime Database');
+    showToast('Đã xóa bản ghi chấm công khỏi cơ sở dữ liệu');
   };
 
   const handleAddStaff = async (newStaff: StaffMember) => {
-    const scopedStaff: StaffMember = {
-      ...newStaff,
-      tenantId: activeTenantId,
-    };
-    setStaff((prev) => [scopedStaff, ...prev]);
-    await addStaffToFirestore(scopedStaff, activeTenantId);
-    await logUserAction('staff', 'Thêm nhân sự', scopedStaff.name, `Thêm nhân sự ${scopedStaff.name} (${scopedStaff.role})`);
-    showToast(`Đã lưu nhân sự "${scopedStaff.name}" lên Realtime Database`);
+    setStaff((prev) => [newStaff, ...prev]);
+    await addStaffToDatabase(newStaff);
+    await logUserAction('staff', 'Thêm nhân sự', newStaff.name, `Thêm nhân sự ${newStaff.name} (${newStaff.role})`);
+    showToast(`Đã lưu nhân sự "${newStaff.name}" lên cơ sở dữ liệu`);
   };
 
   const handleDeleteStaff = async (staffId: string) => {
     const targetStaff = staff.find((s) => s.id === staffId);
     setStaff((prev) => prev.filter((s) => s.id !== staffId));
-    await deleteStaffFromFirestore(staffId, activeTenantId);
+    await deleteStaffFromDatabase(staffId);
     await logUserAction('staff', 'Xóa nhân sự', targetStaff?.name || staffId, `Đã xóa nhân sự ${targetStaff?.name || staffId}`);
-    showToast('Đã xóa nhân sự khỏi Realtime Database');
+    showToast('Đã xóa nhân sự khỏi cơ sở dữ liệu');
   };
 
   const handleClearAllData = async () => {
-    await clearAllDatabaseData(activeTenantId);
+    await clearAllDatabaseData();
     setProjects([]);
     setMaterials([]);
     setExportedGoods([]);
     setLaborLogs([]);
     setStaff([]);
-    await logUserAction('settings', 'Xóa dữ liệu', 'Xóa trắng', `Xóa toàn bộ dữ liệu dự án, kho vật tư và nhân sự của chi nhánh ${activeTenantId}`);
-    showToast('Đã dọn dẹp dữ liệu chi nhánh hiện tại trên Realtime Database');
+    await logUserAction('settings', 'Xóa dữ liệu', 'Xóa trắng', `Xóa toàn bộ dữ liệu dự án, kho vật tư và nhân sự trên cơ sở dữ liệu`);
+    showToast('Đã dọn dẹp cơ sở dữ liệu thành công!');
   };
 
   const handleSeedSampleData = async () => {
-    const activeTenant = tenants.find((t) => t.id === activeTenantId);
-    await seedSampleDataToFirestore(activeTenantId, activeTenant?.code || 'CT36');
-    await logUserAction('settings', 'Nạp dữ liệu mẫu', 'Khởi tạo mẫu', `Khởi tạo bộ dữ liệu mẫu cho chi nhánh ${activeTenant?.name || activeTenantId}`);
+    await seedSampleDataToDatabase();
+    await logUserAction('settings', 'Nạp dữ liệu mẫu', 'Khởi tạo mẫu', `Khởi tạo bộ dữ liệu mẫu chuẩn`);
     showToast('Đã nạp bộ dữ liệu mẫu thành công!');
   };
-
-  const currentTenant = tenants.find((t) => t.id === activeTenantId) || tenants[0];
 
   // If not logged in, render the Login Screen
   if (!currentUser) {
@@ -896,10 +729,8 @@ export default function App() {
         <LoginScreen
           onLoginSuccess={handleLoginSuccess}
           onRegisterAccount={handleRegisterAccount}
-          onRegisterNewEnterprise={handleRegisterNewEnterprise}
           accounts={accounts}
           companySettings={companySettings}
-          tenants={tenants}
         />
 
         {toastMessage && (
@@ -933,8 +764,6 @@ export default function App() {
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         onOpenSupportModal={() => setIsSupportOpen(true)}
-        tenants={tenants}
-        activeTenantId={activeTenantId}
       />
 
       {/* Main App Content Area */}
@@ -963,13 +792,13 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Firebase Live Cloud Badge */}
+            {/* Live Cloud Badge */}
             <div
               className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold"
-              title="Đã kết nối Firebase Realtime Database: kho36manage (Multi-Tenant Engine)"
+              title="Đã kết nối Firebase Realtime Database: kho36manage (Hệ Thống Độc Lập)"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Multi-Tenant RTDB</span>
+              <span>Hệ Thống Độc Lập</span>
             </div>
 
             {/* Switch to login screen button */}
@@ -1017,11 +846,11 @@ export default function App() {
                 {currentUser.username.substring(0, 2).toUpperCase()}
               </div>
               <div className="hidden md:block text-left leading-tight">
-                <span className="text-xs font-bold text-slate-800 block truncate max-w-[120px]">
+                <span className="text-xs font-bold text-slate-800 block truncate max-w-[140px]">
                   {currentUser.name}
                 </span>
                 <span className="text-[10px] text-blue-600 font-semibold block uppercase">
-                  {currentUser.orgId} • {currentUser.role}
+                  {currentUser.role === 'admin' ? 'Quản Trị Viên' : currentUser.role === 'storekeeper' ? 'Thủ Kho' : 'Giám Sát'}
                 </span>
               </div>
             </div>
@@ -1125,9 +954,6 @@ export default function App() {
               onDeleteAccount={handleDeleteAccount}
               onClearAllData={handleClearAllData}
               onSeedSampleData={handleSeedSampleData}
-              tenants={tenants}
-              activeTenantId={activeTenantId}
-              onSelectTenant={handleSelectTenant}
             />
           )}
         </main>

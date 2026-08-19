@@ -75,13 +75,19 @@ export const ActivityLogsModal: React.FC<ActivityLogsModalProps> = ({
         selectedCategory === 'all' ? true : log.category === selectedCategory;
 
       const q = searchTerm.toLowerCase().trim();
+      const lTitle = (log.title || '').toLowerCase();
+      const lDesc = (log.description || '').toLowerCase();
+      const lAction = (log.action || '').toLowerCase();
+      const lUser = (log.userName || '').toLowerCase();
+      const lTime = (log.timeFormatted || '').toLowerCase();
+
       const matchSearch =
         !q ||
-        log.title.toLowerCase().includes(q) ||
-        log.description.toLowerCase().includes(q) ||
-        log.action.toLowerCase().includes(q) ||
-        log.userName.toLowerCase().includes(q) ||
-        log.timeFormatted.toLowerCase().includes(q);
+        lTitle.includes(q) ||
+        lDesc.includes(q) ||
+        lAction.includes(q) ||
+        lUser.includes(q) ||
+        lTime.includes(q);
 
       return matchCategory && matchSearch;
     });

@@ -15,7 +15,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
-import { CompanySettings, TenantOrganization, UserAccount } from '../types';
+import { CompanySettings, UserAccount } from '../types';
 
 export type NavTab = 'dashboard' | 'projects' | 'materials' | 'staff' | 'settings';
 
@@ -29,8 +29,6 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   onOpenSupportModal: () => void;
-  tenants?: TenantOrganization[];
-  activeTenantId?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -43,8 +41,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
   onOpenSupportModal,
-  tenants = [],
-  activeTenantId,
 }) => {
   const menuItems: { id: NavTab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Tổng quan', icon: <LayoutGrid className="w-5 h-5" /> },
@@ -53,8 +49,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'staff', label: 'Nhân sự', icon: <Users className="w-5 h-5" /> },
     { id: 'settings', label: 'Thiết lập', icon: <Settings className="w-5 h-5" /> },
   ];
-
-  const currentTenant = tenants.find((t) => t.id === activeTenantId) || tenants[0];
 
   return (
     <>

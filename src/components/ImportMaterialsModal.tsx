@@ -122,11 +122,11 @@ export const ImportMaterialsModal: React.FC<ImportMaterialsModalProps> = ({
       if (filterStatus !== 'all' && r.status !== filterStatus) return false;
       // Search term
       if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
-        const matchName = r.name.toLowerCase().includes(query);
-        const matchCode = r.code.toLowerCase().includes(query);
-        const matchBrand = r.brand.toLowerCase().includes(query);
-        const matchCat = r.category.toLowerCase().includes(query);
+        const query = searchTerm.toLowerCase().trim();
+        const matchName = (r.name || '').toLowerCase().includes(query);
+        const matchCode = (r.code || '').toLowerCase().includes(query);
+        const matchBrand = (r.brand || '').toLowerCase().includes(query);
+        const matchCat = (r.category || '').toLowerCase().includes(query);
         if (!matchName && !matchCode && !matchBrand && !matchCat) return false;
       }
       return true;

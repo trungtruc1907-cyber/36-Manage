@@ -80,7 +80,8 @@ export const StaffView: React.FC<StaffViewProps> = ({
     const map = new Map<string, { totalWorkdays: number; totalCost: number; logCount: number }>();
 
     staff.forEach((s) => {
-      const sName = s.name.trim().toLowerCase();
+      const sName = (s?.name || '').trim().toLowerCase();
+      if (!sName) return;
       let totalWorkdays = 0;
       let totalCost = 0;
       let logCount = 0;
@@ -128,33 +129,40 @@ export const StaffView: React.FC<StaffViewProps> = ({
   // Open modal for Editing
   const handleOpenEditModal = (member: StaffMember) => {
     setEditingStaff(member);
-    setName(member.name);
-    setRole(member.role);
-    setPhone(member.phone);
+    setName(member.name || '');
+    setRole(member.role || 'Thợ chính chống thấm');
+    setPhone(member.phone || '');
     setDailyWage(member.dailyWage || 450000);
     setStatus(member.status || 'Sẵn sàng nhận dự án mới');
     setIsModalOpen(true);
   };
 
   const filtered = useMemo(() => {
+    const search = searchTerm.toLowerCase().trim();
     return staff.filter((w) => {
+      const wName = (w?.name || '').toLowerCase();
+      const wRole = (w?.role || '').toLowerCase();
+      const wPhone = w?.phone || '';
+      const wStatus = (w?.status || '').toLowerCase();
+
       const matchSearch =
-        w.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        w.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        w.phone.includes(searchTerm) ||
-        w.status.toLowerCase().includes(searchTerm.toLowerCase());
+        !search ||
+        wName.includes(search) ||
+        wRole.includes(search) ||
+        wPhone.includes(search) ||
+        wStatus.includes(search);
 
       const matchRole =
         roleFilter === 'all'
           ? true
           : roleFilter === 'main'
-          ? w.role.toLowerCase().includes('chính') || w.role.toLowerCase().includes('tổ trưởng')
+          ? wRole.includes('chính') || wRole.includes('tổ trưởng')
           : roleFilter === 'supervisor'
-          ? w.role.toLowerCase().includes('kỹ sư') ||
-            w.role.toLowerCase().includes('giám sát') ||
-            w.role.toLowerCase().includes('chỉ huy')
+          ? wRole.includes('kỹ sư') ||
+            wRole.includes('giám sát') ||
+            wRole.includes('chỉ huy')
           : roleFilter === 'helper'
-          ? w.role.toLowerCase().includes('phụ')
+          ? wRole.includes('phụ')
           : true;
 
       return matchSearch && matchRole;
@@ -164,9 +172,9 @@ export const StaffView: React.FC<StaffViewProps> = ({
   // Statistics calculation
   const stats = useMemo(() => {
     const total = staff.length;
-    const working = staff.filter((s) => !s.status.toLowerCase().includes('sẵn sàng')).length;
+    const working = staff.filter((s) => !(s?.status || '').toLowerCase().includes('sẵn sàng')).length;
     const ready = total - working;
-    const totalWage = staff.reduce((sum, s) => sum + (s.dailyWage || 0), 0);
+    const totalWage = staff.reduce((sum, s) => sum + (s?.dailyWage || 0), 0);
     const avgWage = total > 0 ? Math.round(totalWage / total) : 0;
 
     return { total, working, ready, avgWage };
@@ -381,11 +389,11 @@ export const StaffView: React.FC<StaffViewProps> = ({
       {/* Staff Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((w) => {
-          const isReady = w.status.toLowerCase().includes('sẵn sàng');
+          const isReady = (w.status || '').toLowerCase().includes('sẵn sàng');
           const isSupervisor =
-            w.role.toLowerCase().includes('kỹ sư') ||
-            w.role.toLowerCase().includes('giám sát') ||
-            w.role.toLowerCase().includes('chỉ huy');
+            (w.role || '').toLowerCase().includes('kỹ sư') ||
+            (w.role || '').toLowerCase().includes('giám sát') ||
+            (w.role || '').toLowerCase().includes('chỉ huy');
           const attStats = getStaffAttendanceSummary.get(w.id) || {
             totalWorkdays: 0,
             totalCost: 0,

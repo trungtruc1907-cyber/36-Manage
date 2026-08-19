@@ -1,6 +1,6 @@
 {
   "name": "Waterproofing 36",
-  "description": "Hệ thống quản lý thi công và vật tư đa doanh nghiệp Waterproofing 36 với màn hình đăng nhập và tổng quan trực quan.",
+  "description": "Hệ thống quản lý thi công, kho vật tư, chấm công và nhân sự Waterproofing 36 với cơ sở dữ liệu độc lập.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

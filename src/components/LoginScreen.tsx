@@ -10,63 +10,37 @@ import {
   AlertCircle,
   UserPlus,
   ShieldCheck,
-  ArrowRight,
-  HelpCircle,
   Sparkles,
   Info,
   KeyRound,
   CheckCircle2,
   Phone,
   Mail,
-  ArrowLeft,
   RefreshCw,
 } from 'lucide-react';
 import {
   CompanySettings,
-  TenantOrganization,
   UserAccount,
   UserAccountRecord,
   DEFAULT_ADMIN_PERMISSIONS,
   DEFAULT_USER_PERMISSIONS,
 } from '../types';
 import { INITIAL_USER_ACCOUNTS, recordLoginHistoryToDatabase, saveUserAccountToDatabase } from '../firebase';
-import { INITIAL_TENANTS } from '../data/mockData';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: UserAccount) => void;
   onRegisterAccount?: (newAccount: UserAccountRecord) => Promise<void> | void;
-  onRegisterNewEnterprise?: (
-    tenantData: {
-      code: string;
-      name: string;
-      brandName?: string;
-      tagline?: string;
-      phone?: string;
-      email?: string;
-      address?: string;
-      taxCode?: string;
-      customLogoUrl?: string | null;
-    },
-    accountData: {
-      username: string;
-      password?: string;
-      name: string;
-      phone?: string;
-      email?: string;
-    }
-  ) => Promise<{ tenant: TenantOrganization; user: UserAccountRecord }>;
   accounts?: UserAccountRecord[];
   companySettings?: CompanySettings;
-  tenants?: TenantOrganization[];
+  tenants?: any[];
+  onRegisterNewEnterprise?: any;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
   onLoginSuccess,
   onRegisterAccount,
-  onRegisterNewEnterprise,
   accounts = INITIAL_USER_ACCOUNTS,
   companySettings,
-  tenants = INITIAL_TENANTS,
 }) => {
   // Active Mode: 'login' | 'register'
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -76,9 +50,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     return localStorage.getItem('chongtham36_last_username') || '';
   });
   const [password, setPassword] = useState('');
-  const [orgId, setOrgId] = useState(() => {
-    return localStorage.getItem('chongtham36_last_orgId') || companySettings?.orgId || 'CT36';
-  });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -88,7 +59,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
   // Forgot Password / Password Recovery Form States
   const [forgotUsername, setForgotUsername] = useState('');
-  const [forgotOrgId, setForgotOrgId] = useState(companySettings?.orgId || '');
   const [forgotVerification, setForgotVerification] = useState('');
   const [forgotNewPassword, setForgotNewPassword] = useState('');
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
@@ -97,10 +67,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [isResettingPassword, setIsResettingPassword] = useState(false);
 
+  // Register Form States
+  const [regName, setRegName] = useState('');
+  const [regUsername, setRegUsername] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [regRole, setRegRole] = useState<'admin' | 'storekeeper' | 'supervisor'>('supervisor');
+  const [regPhone, setRegPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regShowPassword, setRegShowPassword] = useState(false);
+
   // Open Forgot Password Modal Helper
   const handleOpenForgotModal = () => {
     setForgotUsername(username || 'admin');
-    setForgotOrgId(orgId || companySettings?.orgId || 'CT36');
     setForgotVerification('');
     setForgotNewPassword('');
     setForgotConfirmPassword('');
@@ -117,17 +96,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setForgotSuccess('');
 
     const cleanUser = forgotUsername.trim().toLowerCase().replace(/\s+/g, '');
-    const cleanOrg = forgotOrgId.trim().toUpperCase();
     const cleanVerification = forgotVerification.trim().toLowerCase();
     const cleanNewPass = forgotNewPassword.trim();
     const cleanConfirmPass = forgotConfirmPassword.trim();
 
     if (!cleanUser) {
       setForgotError('Vui lòng nhập Tên đăng nhập cần lấy lại mật khẩu');
-      return;
-    }
-    if (!cleanOrg) {
-      setForgotError('Vui lòng nhập Mã Doanh Nghiệp (ví dụ: CT36)');
       return;
     }
     if (!cleanNewPass || cleanNewPass.length < 4) {
@@ -149,22 +123,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       if (!matched) {
         setForgotError(`Không tìm thấy tài khoản "${cleanUser}" trong cơ sở dữ liệu. Vui lòng kiểm tra lại.`);
-        setIsResettingPassword(false);
-        return;
-      }
-
-      // Check organization affiliation
-      const isSuperAdmin = cleanUser === 'admin';
-      const userOrg = (matched.orgId || 'CT36').toUpperCase();
-      const allowed = matched.allowedTenants || [];
-      const orgMatches =
-        isSuperAdmin ||
-        userOrg === cleanOrg ||
-        allowed.some((t) => t.toUpperCase() === cleanOrg) ||
-        tenants.some((t) => t.code.toUpperCase() === cleanOrg && allowed.includes(t.id));
-
-      if (!orgMatches) {
-        setForgotError(`Tài khoản "${cleanUser}" không thuộc về Mã Doanh Nghiệp "${cleanOrg}".`);
         setIsResettingPassword(false);
         return;
       }
@@ -207,7 +165,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       // Pre-fill form state for immediate login
       setUsername(cleanUser);
       setPassword(cleanNewPass);
-      setOrgId(cleanOrg);
 
       setForgotSuccess(`Đã đặt lại mật khẩu mới cho tài khoản "${matched.name || cleanUser}" thành công!`);
       setIsResettingPassword(false);
@@ -218,17 +175,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   };
 
-  // Register New Enterprise Form States
-  const [entCode, setEntCode] = useState('');
-  const [entName, setEntName] = useState('');
-  const [entBrandName, setEntBrandName] = useState('');
-  const [entAddress, setEntAddress] = useState('');
-  const [entPhone, setEntPhone] = useState('');
-  const [entAdminName, setEntAdminName] = useState('');
-  const [entUsername, setEntUsername] = useState('');
-  const [entPassword, setEntPassword] = useState('');
-  const [entConfirmPassword, setEntConfirmPassword] = useState('');
-  const [entShowPassword, setEntShowPassword] = useState(false);
+  // Quick Demo Account Autofill
+  const handleQuickLogin = (demoUser: string, demoPass: string) => {
+    setUsername(demoUser);
+    setPassword(demoPass);
+    setErrorMessage('');
+  };
 
   // Handle Login Submit
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -238,7 +190,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
     const cleanUsername = username.trim();
     const cleanPassword = password.trim();
-    const cleanOrgId = orgId.trim().toUpperCase();
 
     if (!cleanUsername) {
       setErrorMessage('Vui lòng nhập Tên đăng nhập (User)');
@@ -246,10 +197,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
     if (!cleanPassword) {
       setErrorMessage('Vui lòng nhập Mật khẩu (Pass)');
-      return;
-    }
-    if (!cleanOrgId) {
-      setErrorMessage('Vui lòng nhập Mã Doanh Nghiệp (Mã Chi nhánh / Tổ đội)');
       return;
     }
 
@@ -264,12 +211,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         (acc) => acc.username.toLowerCase() === cleanUsername.toLowerCase()
       );
 
-      // 1. Check if account exists & validate password
+      // Validate password
       if (matchedAccount) {
         if (matchedAccount.password && matchedAccount.password !== cleanPassword) {
           setErrorMessage('Mật khẩu không chính xác. Vui lòng kiểm tra lại!');
 
-          // Record failed login to Firebase Realtime Database
+          // Record failed login to Realtime Database
           const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Web Browser';
           let device = 'Máy tính (Desktop)';
           if (/mobile|android|iphone|ipad|tablet/i.test(userAgent)) {
@@ -283,7 +230,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             username: cleanUsername,
             name: matchedAccount.name,
             role: matchedAccount.role,
-            orgId: cleanOrgId,
+            orgId: companySettings?.orgId || 'CT36',
             timestamp: Date.now(),
             timeFormatted,
             status: 'failed',
@@ -293,62 +240,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           });
           return;
         }
-
-        // 2. Strict Tenant Authorization & Isolation Check
-        // Super Admin (root admin account) has global access
-        const isSuperAdmin =
-          matchedAccount.username.toLowerCase() === 'admin' &&
-          (matchedAccount.orgId?.toUpperCase() === 'CT36' || matchedAccount.allowedTenants?.includes('*'));
-
-        if (!isSuperAdmin) {
-          const userOrg = (matchedAccount.orgId || '').toUpperCase();
-          const allowedTenantsList = matchedAccount.allowedTenants || [];
-
-          // Check whether the entered cleanOrgId matches user's org or allowedTenants
-          const isAllowedOrg =
-            userOrg === cleanOrgId ||
-            allowedTenantsList.some((tId) => tId.toUpperCase() === cleanOrgId) ||
-            tenants.some((t) => t.code.toUpperCase() === cleanOrgId && allowedTenantsList.includes(t.id));
-
-          if (!isAllowedOrg) {
-            setErrorMessage(
-              `⛔ Bạn không có quyền truy cập vào Doanh nghiệp "${cleanOrgId}". Tài khoản "${matchedAccount.name}" chỉ được phép đăng nhập vào Doanh nghiệp "${matchedAccount.orgId}" (${matchedAccount.orgName || ''})!`
-            );
-
-            // Record unauthorized login attempt
-            const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Web Browser';
-            let device = 'Máy tính (Desktop)';
-            if (/mobile|android|iphone|ipad|tablet/i.test(userAgent)) {
-              device = 'Điện thoại / Di động';
-            }
-            const now = new Date();
-            const timeFormatted = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-
-            recordLoginHistoryToDatabase({
-              id: `LOG-UNAUTH-${Date.now()}`,
-              username: cleanUsername,
-              name: matchedAccount.name,
-              role: matchedAccount.role,
-              orgId: cleanOrgId,
-              timestamp: Date.now(),
-              timeFormatted,
-              status: 'failed',
-              userAgent: userAgent.substring(0, 150),
-              device,
-              notes: `Cố tình đăng nhập trái phép vào ${cleanOrgId} (Thuộc về ${userOrg})`,
-            });
-            return;
-          }
-        }
       }
 
       // Prepare user session object
-      const matchedTenantObj = tenants.find(
-        (t) => t.code.toUpperCase() === cleanOrgId || t.id === cleanOrgId
-      );
-      const orgName = matchedTenantObj
-        ? matchedTenantObj.name
-        : matchedAccount?.orgName || (companySettings?.orgId === cleanOrgId ? companySettings.orgName : `Đơn vị ${cleanOrgId}`);
+      const orgName = companySettings?.orgName || 'Công Ty Trường Sơn - Waterproofing 36';
+      const orgCode = companySettings?.orgId || 'CT36';
 
       const userRole = matchedAccount
         ? matchedAccount.role
@@ -371,20 +267,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       const authenticatedUser: UserAccount = {
         username: cleanUsername,
         role: userRole,
-        orgId: cleanOrgId,
+        orgId: orgCode,
         orgName,
         name: userName,
         phone: matchedAccount?.phone,
         email: matchedAccount?.email,
-        allowedTenants: matchedAccount?.allowedTenants || [matchedTenantObj?.id || cleanOrgId],
-        isTenantOwner: matchedAccount?.isTenantOwner,
-        createdTenantId: matchedAccount?.createdTenantId,
         permissions: userPermissions,
       };
 
       // Save to localStorage for quick restore
       localStorage.setItem('chongtham36_last_username', cleanUsername);
-      localStorage.setItem('chongtham36_last_orgId', cleanOrgId);
       if (rememberMe) {
         localStorage.setItem('chongtham36_active_user', JSON.stringify(authenticatedUser));
       } else {
@@ -395,30 +287,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }, 400);
   };
 
-  // Handle Register New Enterprise Submit
-  const handleRegisterEnterpriseSubmit = async (e: React.FormEvent) => {
+  // Handle Register New User Submit
+  const handleRegisterUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    const cleanCode = entCode.trim().toUpperCase();
-    const cleanName = entName.trim();
-    const cleanBrand = entBrandName.trim() || cleanName;
-    const cleanAdmin = entAdminName.trim();
-    const cleanUsername = entUsername.trim().toLowerCase().replace(/\s+/g, '');
-    const cleanPassword = entPassword.trim();
-    const cleanConfirm = entConfirmPassword.trim();
+    const cleanName = regName.trim();
+    const cleanUsername = regUsername.trim().toLowerCase().replace(/\s+/g, '');
+    const cleanPassword = regPassword.trim();
+    const cleanConfirm = regConfirmPassword.trim();
 
-    if (!cleanCode || cleanCode.length < 2) {
-      setErrorMessage('Vui lòng nhập Mã Doanh Nghiệp (tối thiểu 2 ký tự, ví dụ: TH01, DN36, HP01)');
-      return;
-    }
     if (!cleanName) {
-      setErrorMessage('Vui lòng nhập Tên đầy đủ của Doanh nghiệp / Chi nhánh');
-      return;
-    }
-    if (!cleanAdmin) {
-      setErrorMessage('Vui lòng nhập Họ & Tên người quản trị');
+      setErrorMessage('Vui lòng nhập Họ & Tên người dùng');
       return;
     }
     if (!cleanUsername || cleanUsername.length < 3) {
@@ -434,13 +315,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       return;
     }
 
-    // Check duplicate tenant code
-    const isDuplicateTenant = tenants.some((t) => t.code.toUpperCase() === cleanCode);
-    if (isDuplicateTenant) {
-      setErrorMessage(`Mã Doanh Nghiệp "${cleanCode}" đã tồn tại trên hệ thống. Vui lòng chọn mã khác!`);
-      return;
-    }
-
     // Check duplicate username
     const combinedAccounts = [...INITIAL_USER_ACCOUNTS, ...accounts];
     if (combinedAccounts.some((a) => a.username.toLowerCase() === cleanUsername)) {
@@ -451,70 +325,41 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIsLoading(true);
 
     try {
-      if (onRegisterNewEnterprise) {
-        const result = await onRegisterNewEnterprise(
-          {
-            code: cleanCode,
-            name: cleanName,
-            brandName: cleanBrand,
-            phone: entPhone.trim(),
-            address: entAddress.trim(),
-            tagline: `Chi nhánh ${cleanBrand} — Giải pháp chống thấm chuyên nghiệp`,
-            status: 'active',
-            createdAt: new Date().toLocaleDateString('vi-VN'),
-          },
-          {
-            username: cleanUsername,
-            password: cleanPassword,
-            name: cleanAdmin,
-            phone: entPhone.trim() || undefined,
-            role: 'admin',
-            orgId: cleanCode,
-            orgName: cleanName,
-          }
-        );
+      const orgName = companySettings?.orgName || 'Công Ty Trường Sơn - Waterproofing 36';
+      const orgCode = companySettings?.orgId || 'CT36';
 
-        setIsLoading(false);
-        setSuccessMessage(`Đã khởi tạo thành công Doanh nghiệp ${cleanName} (${cleanCode})! Đang tự động đăng nhập...`);
+      const permissions = regRole === 'admin' ? DEFAULT_ADMIN_PERMISSIONS : DEFAULT_USER_PERMISSIONS;
 
-        setTimeout(() => {
-          localStorage.setItem('chongtham36_last_username', cleanUsername);
-          localStorage.setItem('chongtham36_last_orgId', cleanCode);
-          localStorage.setItem('chongtham36_active_user', JSON.stringify(result.user));
-          onLoginSuccess(result.user);
-        }, 600);
-      } else {
-        // Fallback standard register
-        const newAccountRecord: UserAccountRecord = {
-          username: cleanUsername,
-          password: cleanPassword,
-          name: cleanAdmin,
-          role: 'admin',
-          orgId: cleanCode,
-          orgName: cleanName,
-          phone: entPhone.trim() || undefined,
-          isTenantOwner: true,
-          permissions: DEFAULT_ADMIN_PERMISSIONS,
-          createdAt: new Date().toLocaleDateString('vi-VN'),
-        };
+      const newAccountRecord: UserAccountRecord = {
+        username: cleanUsername,
+        password: cleanPassword,
+        name: cleanName,
+        role: regRole,
+        orgId: orgCode,
+        orgName,
+        phone: regPhone.trim() || undefined,
+        email: regEmail.trim() || undefined,
+        permissions,
+        createdAt: new Date().toLocaleDateString('vi-VN'),
+      };
 
-        if (onRegisterAccount) {
-          await onRegisterAccount(newAccountRecord);
-        }
+      await saveUserAccountToDatabase(newAccountRecord);
 
-        setIsLoading(false);
-        setSuccessMessage('Đăng ký thành công! Đang đăng nhập...');
-
-        setTimeout(() => {
-          localStorage.setItem('chongtham36_last_username', cleanUsername);
-          localStorage.setItem('chongtham36_last_orgId', cleanCode);
-          localStorage.setItem('chongtham36_active_user', JSON.stringify(newAccountRecord));
-          onLoginSuccess(newAccountRecord);
-        }, 600);
+      if (onRegisterAccount) {
+        await onRegisterAccount(newAccountRecord);
       }
+
+      setIsLoading(false);
+      setSuccessMessage('Đăng ký tài khoản thành công! Đang đăng nhập...');
+
+      setTimeout(() => {
+        localStorage.setItem('chongtham36_last_username', cleanUsername);
+        localStorage.setItem('chongtham36_active_user', JSON.stringify(newAccountRecord));
+        onLoginSuccess(newAccountRecord);
+      }, 600);
     } catch (err) {
       setIsLoading(false);
-      setErrorMessage(err instanceof Error ? err.message : 'Có lỗi khi khởi tạo Doanh nghiệp mới!');
+      setErrorMessage(err instanceof Error ? err.message : 'Có lỗi khi khởi tạo tài khoản mới!');
     }
   };
 
@@ -535,6 +380,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       {/* Main Container */}
       <div className="w-full max-w-[480px] flex flex-col items-center z-10 my-auto py-6">
+        {/* Brand Header */}
+        <div className="text-center mb-5 text-white">
+          <span className="text-[11px] font-black tracking-widest uppercase bg-white/20 px-3 py-1 rounded-full text-white/90 font-mono">
+            HỆ THỐNG QUẢN LÝ ĐỘC LẬP
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mt-2 font-['Plus_Jakarta_Sans',sans-serif]">
+            {companySettings?.brandName || 'Waterproofing 36'}
+          </h1>
+          <p className="text-xs text-blue-100/90 mt-1 max-w-sm mx-auto">
+            {companySettings?.tagline || 'Quản lý thi công & vật tư chống thấm chuyên nghiệp'}
+          </p>
+        </div>
+
         {/* Login / Register Tab Pill */}
         <div className="w-full max-w-[420px] mb-3 p-1 bg-black/20 backdrop-blur-md rounded-2xl flex items-center justify-between border border-white/20">
           <button
@@ -570,7 +428,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             }`}
           >
             <UserPlus className="w-3.5 h-3.5" />
-            <span>Đăng Ký Doanh Nghiệp</span>
+            <span>Đăng Ký Tài Khoản</span>
           </button>
         </div>
 
@@ -601,7 +459,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 {/* Field 1: User */}
                 <div className="space-y-1">
                   <label className="block text-xs font-semibold text-slate-700">
-                    Tên đăng nhập (User) <span className="text-rose-500 font-bold">*</span>
+                    Tên đăng nhập <span className="text-rose-500 font-bold">*</span>
                   </label>
                   <div className="relative rounded-xl border border-slate-300 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all bg-white overflow-hidden shadow-xs">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -612,7 +470,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder="admin"
+                      placeholder="admin, thukho, giamsat"
                       className="w-full pl-10 pr-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none font-medium"
                     />
                   </div>
@@ -621,7 +479,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 {/* Field 2: Password */}
                 <div className="space-y-1">
                   <label className="block text-xs font-semibold text-slate-700">
-                    Mật khẩu (Pass) <span className="text-rose-500 font-bold">*</span>
+                    Mật khẩu <span className="text-rose-500 font-bold">*</span>
                   </label>
                   <div className="relative rounded-xl border border-slate-300 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all bg-white overflow-hidden shadow-xs">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -646,23 +504,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   </div>
                 </div>
 
-                {/* Field 3: Org ID */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Mã Doanh Nghiệp (Chi nhánh) <span className="text-rose-500 font-bold">*</span>
-                  </label>
-                  <div className="relative rounded-xl border border-slate-300 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all bg-white overflow-hidden shadow-xs">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                      <Building2 className="w-4 h-4" />
-                    </div>
-                    <input
-                      id="login-orgid-input"
-                      type="text"
-                      value={orgId}
-                      onChange={(e) => setOrgId(e.target.value.toUpperCase())}
-                      placeholder="CT36"
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 uppercase outline-none font-bold text-blue-700"
-                    />
+                {/* Quick Demo Accounts Selection */}
+                <div className="pt-1">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold text-slate-500">Đăng nhập nhanh thử nghiệm:</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('admin', '123456')}
+                      className="py-1.5 px-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 text-[11px] font-bold border border-blue-200 transition-colors text-center cursor-pointer"
+                    >
+                      Admin
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('thukho', '123456')}
+                      className="py-1.5 px-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200 transition-colors text-center cursor-pointer"
+                    >
+                      Thủ Kho
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('giamsat', '123456')}
+                      className="py-1.5 px-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-200 transition-colors text-center cursor-pointer"
+                    >
+                      Giám Sát
+                    </button>
                   </div>
                 </div>
 
@@ -713,202 +581,149 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
           )}
 
-          {/* ===================== TAB 2: REGISTER ENTERPRISE ===================== */}
+          {/* ===================== TAB 2: REGISTER USER ===================== */}
           {authMode === 'register' && (
             <div>
               <div className="mb-3.5 pb-2.5 border-b border-slate-100 flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-blue-600" />
-                    Đăng ký Doanh nghiệp / Chi nhánh mới
+                    Đăng ký tài khoản người dùng
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Khởi tạo không gian dữ liệu riêng & tài khoản Quản trị viên
+                    Tạo tài khoản mới để tham gia quản lý thi công và kho
                   </p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold uppercase border border-blue-200">
-                  Độc Lập Dữ Liệu
+                  Người Dùng
                 </span>
               </div>
 
-              <form onSubmit={handleRegisterEnterpriseSubmit} className="space-y-3">
-                {/* Enterprise Code & Brand Name */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div className="space-y-1 sm:col-span-1">
+              <form onSubmit={handleRegisterUserSubmit} className="space-y-3">
+                {/* Full Name */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Họ & Tên <span className="text-rose-500 font-bold">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    id="reg-name-input"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="Nguyễn Văn A"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                {/* Username & Role */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
                     <label className="block text-xs font-semibold text-slate-700">
-                      Mã Doanh Nghiệp <span className="text-rose-500 font-bold">*</span>
+                      Tên đăng nhập <span className="text-rose-500 font-bold">*</span>
                     </label>
                     <input
                       type="text"
                       required
-                      id="new-ent-code-input"
-                      value={entCode}
-                      onChange={(e) => setEntCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
-                      placeholder="VD: TH36, HP01"
-                      maxLength={10}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-blue-700 uppercase outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                      id="reg-username-input"
+                      value={regUsername}
+                      onChange={(e) => setRegUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                      placeholder="nguyenvana"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
 
-                  <div className="space-y-1 sm:col-span-2">
+                  <div className="space-y-1">
                     <label className="block text-xs font-semibold text-slate-700">
-                      Tên Thương Hiệu hiển thị <span className="text-rose-500 font-bold">*</span>
+                      Vai trò / Chức danh <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <select
+                      id="reg-role-select"
+                      value={regRole}
+                      onChange={(e) => setRegRole(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 bg-white"
+                    >
+                      <option value="supervisor">Chỉ huy trưởng / Giám sát</option>
+                      <option value="storekeeper">Thủ kho vật tư</option>
+                      <option value="admin">Quản trị viên (Admin)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Password & Confirm Password */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Mật khẩu <span className="text-rose-500 font-bold">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={regShowPassword ? 'text' : 'password'}
+                        required
+                        id="reg-password-input"
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="••••••"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 pr-8"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setRegShowPassword(!regShowPassword)}
+                        className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {regShowPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Xác nhận mật khẩu <span className="text-rose-500 font-bold">*</span>
                     </label>
                     <input
-                      type="text"
+                      type={regShowPassword ? 'text' : 'password'}
                       required
-                      id="new-ent-brand-input"
-                      value={entBrandName}
-                      onChange={(e) => setEntBrandName(e.target.value)}
-                      placeholder="VD: Chống Thấm Thanh Hóa"
+                      id="reg-confirm-password-input"
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      placeholder="••••••"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
                 </div>
 
-                {/* Enterprise Full Legal Name */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Tên đầy đủ Doanh nghiệp / Tổ đội <span className="text-rose-500 font-bold">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    id="new-ent-name-input"
-                    value={entName}
-                    onChange={(e) => setEntName(e.target.value)}
-                    placeholder="VD: Công Ty TNHH Chống Thấm & Xây Dựng Thanh Hóa"
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-                  />
-                </div>
-
-                {/* Phone & Address */}
+                {/* Phone & Email */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div className="space-y-1">
-                    <label className="block text-xs font-semibold text-slate-700">Số điện thoại liên hệ</label>
+                    <label className="block text-xs font-semibold text-slate-700">Số điện thoại</label>
                     <input
                       type="tel"
-                      id="new-ent-phone-input"
-                      value={entPhone}
-                      onChange={(e) => setEntPhone(e.target.value)}
+                      id="reg-phone-input"
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
                       placeholder="0915 586 234"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-xs font-semibold text-slate-700">Địa chỉ trụ sở / Kho</label>
+                    <label className="block text-xs font-semibold text-slate-700">Email</label>
                     <input
-                      type="text"
-                      id="new-ent-address-input"
-                      value={entAddress}
-                      onChange={(e) => setEntAddress(e.target.value)}
-                      placeholder="TP. Thanh Hóa, Thanh Hóa"
+                      type="email"
+                      id="reg-email-input"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="user@chongtham36.vn"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
                 </div>
 
-                {/* Admin Account Credentials */}
-                <div className="pt-2 border-t border-slate-100 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
-                      Thông tin Tài khoản Quản trị (Admin)
-                    </span>
-                    <span className="text-[10px] text-blue-600 font-semibold flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      Chủ sở hữu Tenant
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div className="space-y-1">
-                      <label className="block text-xs font-semibold text-slate-700">
-                        Họ tên Quản lý / Đại diện <span className="text-rose-500 font-bold">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        id="new-ent-admin-name-input"
-                        value={entAdminName}
-                        onChange={(e) => setEntAdminName(e.target.value)}
-                        placeholder="Nguyễn Văn Hùng"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-xs font-semibold text-slate-700">
-                        Tên đăng nhập (Username) <span className="text-rose-500 font-bold">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        id="new-ent-username-input"
-                        value={entUsername}
-                        onChange={(e) => setEntUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
-                        placeholder="hung_th36"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Password & Confirm */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div className="space-y-1">
-                      <label className="block text-xs font-semibold text-slate-700">
-                        Mật khẩu <span className="text-rose-500 font-bold">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={entShowPassword ? 'text' : 'password'}
-                          required
-                          id="new-ent-password-input"
-                          value={entPassword}
-                          onChange={(e) => setEntPassword(e.target.value)}
-                          placeholder="••••••"
-                          className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 pr-8"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setEntShowPassword(!entShowPassword)}
-                          className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                        >
-                          {entShowPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-xs font-semibold text-slate-700">
-                        Xác nhận mật khẩu <span className="text-rose-500 font-bold">*</span>
-                      </label>
-                      <input
-                        type={entShowPassword ? 'text' : 'password'}
-                        required
-                        id="new-ent-confirm-password-input"
-                        value={entConfirmPassword}
-                        onChange={(e) => setEntConfirmPassword(e.target.value)}
-                        placeholder="••••••"
-                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Isolation Notice Banner */}
-                <div className="p-2.5 rounded-xl bg-blue-50/80 border border-blue-200/80 text-[11px] text-blue-900 flex items-start gap-2">
-                  <ShieldCheck className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <p className="leading-snug">
-                    <strong>Cách ly dữ liệu an toàn:</strong> Khi hoàn tất, hệ thống tự động khởi tạo cơ sở dữ liệu vật tư, công trình, xuất kho và chỉ cho phép tài khoản này đăng nhập vào Doanh nghiệp <strong>{entCode || 'mới'}</strong>.
-                  </p>
-                </div>
-
-                {/* Submit Enterprise Button */}
+                {/* Submit Register Button */}
                 <div className="pt-2">
                   <button
                     type="submit"
-                    id="register-enterprise-submit-btn"
+                    id="register-user-submit-btn"
                     disabled={isLoading}
                     className="w-full bg-[#0c59be] hover:bg-[#094ca7] text-white font-bold py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.99] cursor-pointer"
                   >
@@ -916,9 +731,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <>
-                        <Building2 className="w-4 h-4" />
+                        <UserPlus className="w-4 h-4" />
                         <span className="tracking-wide text-xs sm:text-sm font-bold uppercase font-['Plus_Jakarta_Sans',sans-serif]">
-                          KHỞI TẠO DOANH NGHIỆP & ĐĂNG NHẬP
+                          TẠO TÀI KHOẢN & ĐĂNG NHẬP
                         </span>
                       </>
                     )}
@@ -931,7 +746,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           {/* Version and Copyright */}
           <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
             <span>Phiên bản 2.5.0</span>
-            <span>Kho & Thi Công Xây Dựng</span>
+            <span>Hệ Thống Kho & Thi Công Độc Lập</span>
           </div>
         </div>
       </div>
@@ -990,10 +805,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     <strong className="font-mono text-slate-900">{forgotUsername}</strong>
                   </div>
                   <div className="flex items-center justify-between text-slate-600">
-                    <span>Doanh nghiệp:</span>
-                    <strong className="font-mono text-slate-900">{forgotOrgId}</strong>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-600">
                     <span>Mật khẩu mới:</span>
                     <strong className="font-mono text-blue-700">{forgotNewPassword}</strong>
                   </div>
@@ -1030,29 +841,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       id="forgot-username-input"
                       value={forgotUsername}
                       onChange={(e) => setForgotUsername(e.target.value)}
-                      placeholder="ví dụ: admin, thong_kho"
+                      placeholder="ví dụ: admin, thukho, giamsat"
                       className="w-full pl-9 pr-3 py-2 text-xs text-slate-800 outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Organization Code */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Mã Doanh Nghiệp (Chi nhánh) <span className="text-rose-500 font-bold">*</span>
-                  </label>
-                  <div className="relative rounded-xl border border-slate-300 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 bg-white overflow-hidden">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <Building2 className="w-4 h-4" />
-                    </div>
-                    <input
-                      type="text"
-                      required
-                      id="forgot-orgid-input"
-                      value={forgotOrgId}
-                      onChange={(e) => setForgotOrgId(e.target.value.toUpperCase())}
-                      placeholder="CT36"
-                      className="w-full pl-9 pr-3 py-2 text-xs font-bold text-blue-700 uppercase outline-none"
                     />
                   </div>
                 </div>
@@ -1128,7 +918,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-100 text-[11px] text-blue-800 flex items-start gap-2">
                   <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
                   <span>
-                    Mật khẩu mới sẽ được cập nhật trực tiếp lên hệ thống đám mây Realtime Database. Hotline hỗ trợ kỹ thuật: <strong>0915 586 234</strong>.
+                    Mật khẩu mới sẽ được cập nhật trực tiếp lên hệ thống cơ sở dữ liệu. Hotline hỗ trợ: <strong>0915 586 234</strong>.
                   </span>
                 </div>
 

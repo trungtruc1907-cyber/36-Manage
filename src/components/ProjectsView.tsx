@@ -148,11 +148,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Calculate dynamic exports and labor per project if matching
   const getProjectLiveStats = (proj: ConstructionProject) => {
+    const projCode = (proj?.code || '').toLowerCase();
+    const projName = (proj?.name || '').toLowerCase();
+
     // Matches by code or name
     const projectExports = exportedGoods.filter(
       (e) =>
-        (e.projectCode && e.projectCode.toLowerCase() === proj.code.toLowerCase()) ||
-        (e.projectName && e.projectName.toLowerCase() === proj.name.toLowerCase())
+        (projCode && e.projectCode && e.projectCode.toLowerCase() === projCode) ||
+        (projName && e.projectName && e.projectName.toLowerCase() === projName)
     );
 
     const calculatedExportsVal = projectExports.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
@@ -160,7 +163,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
     // Matches labor logs
     const projectLabor = laborLogs.filter(
-      (l) => l.projectName && l.projectName.toLowerCase() === proj.name.toLowerCase()
+      (l) => l.projectName && projName && l.projectName.toLowerCase() === projName
     );
     const calculatedWorkdays = projectLabor.reduce((sum, item) => sum + (item.totalWorkdays || 0), 0);
     const totalWorkdays = calculatedWorkdays > 0 ? calculatedWorkdays : proj.workdaysLogged || 0;
@@ -178,15 +181,20 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Filter & Sort list - Default: sorted by newest created time on top
   const filteredProjects = useMemo(() => {
+    const search = searchTerm.toLowerCase().trim();
     return projects
       .filter((p) => {
-        const search = searchTerm.toLowerCase();
+        const pName = (p?.name || '').toLowerCase();
+        const pPartner = (p?.partner || '').toLowerCase();
+        const pCode = (p?.code || '').toLowerCase();
+        const pAddress = (p?.address || '').toLowerCase();
+
         const matchesSearch =
-          !searchTerm ||
-          p.name.toLowerCase().includes(search) ||
-          p.partner.toLowerCase().includes(search) ||
-          p.code.toLowerCase().includes(search) ||
-          (p.address && p.address.toLowerCase().includes(search));
+          !search ||
+          pName.includes(search) ||
+          pPartner.includes(search) ||
+          pCode.includes(search) ||
+          pAddress.includes(search);
 
         const matchesStatus =
           statusFilter === 'all' ||
