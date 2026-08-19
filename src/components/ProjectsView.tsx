@@ -23,6 +23,10 @@ import {
   Lock,
   ArrowUpDown,
   Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { ConstructionProject, ExportedGood, LaborDailyLog, StaffMember, CompanySettings, UserAccount, hasUserPermission } from '../types';
 import { exportProjectToExcel, printProjectReport } from '../utils/projectExportUtils';
@@ -140,6 +144,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [projectToDelete, setProjectToDelete] = useState<ConstructionProject | null>(null);
   const [isDeletingProject, setIsDeletingProject] = useState(false);
 
+  // Pagination states for projects list
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(9);
+
   // Quick Complete Popup state
   const [projectToComplete, setProjectToComplete] = useState<ConstructionProject | null>(null);
   const [quickCompletedValueInput, setQuickCompletedValueInput] = useState<string>('');
@@ -225,6 +233,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         return getProjectCreationTimestamp(b) - getProjectCreationTimestamp(a);
       });
   }, [projects, searchTerm, statusFilter, sortBy]);
+
+  // Projects Pagination Calculations
+  const totalPages = Math.ceil(filteredProjects.length / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedProjects = useMemo(() => {
+    const startIndex = (safeCurrentPage - 1) * pageSize;
+    return filteredProjects.slice(startIndex, startIndex + pageSize);
+  }, [filteredProjects, safeCurrentPage, pageSize]);
 
   // Aggregate stats across all projects
   const totalProjectsCount = projects.length;
@@ -405,7 +421,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs overflow-x-auto max-w-full">
             <button
               type="button"
-              onClick={() => setStatusFilter('all')}
+              onClick={() => {
+                setStatusFilter('all');
+                setCurrentPage(1);
+              }}
               className={`px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 statusFilter === 'all'
                   ? 'bg-white text-slate-900 shadow-2xs'
@@ -416,7 +435,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('active')}
+              onClick={() => {
+                setStatusFilter('active');
+                setCurrentPage(1);
+              }}
               className={`px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 statusFilter === 'active'
                   ? 'bg-emerald-600 text-white shadow-2xs'
@@ -427,7 +449,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('pending')}
+              onClick={() => {
+                setStatusFilter('pending');
+                setCurrentPage(1);
+              }}
               className={`px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 statusFilter === 'pending'
                   ? 'bg-amber-600 text-white shadow-2xs'
@@ -438,7 +463,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('completed')}
+              onClick={() => {
+                setStatusFilter('completed');
+                setCurrentPage(1);
+              }}
               className={`px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 statusFilter === 'completed'
                   ? 'bg-blue-600 text-white shadow-2xs'
@@ -486,14 +514,20 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Tìm kiếm theo tên công trình, mã dự án, đối tác / chủ đầu tư, địa chỉ thi công..."
               className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-slate-800 placeholder:text-slate-400 focus:border-blue-600 outline-none transition-colors"
             />
             {searchTerm && (
               <button
                 type="button"
-                onClick={() => setSearchTerm('')}
+                onClick={() => {
+                  setSearchTerm('');
+                  setCurrentPage(1);
+                }}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
@@ -507,7 +541,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap hidden sm:inline">Sắp xếp:</span>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              onChange={(e) => {
+                setSortBy(e.target.value as any);
+                setCurrentPage(1);
+              }}
               className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer pr-1"
               title="Chọn thứ tự sắp xếp danh sách công trình"
             >
@@ -523,7 +560,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       {/* GRID VIEW */}
       {viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredProjects.map((proj) => {
+          {paginatedProjects.map((proj) => {
             const stats = getProjectLiveStats(proj);
             const isCompleted = proj.status === 'completed';
             const isPending = proj.status === 'pending';
@@ -785,7 +822,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  filteredProjects.map((proj) => {
+                  paginatedProjects.map((proj) => {
                     const stats = getProjectLiveStats(proj);
                     const isCompleted = proj.status === 'completed';
                     const creationTime = getProjectCreationTimestamp(proj);
@@ -918,6 +955,134 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* PAGINATION CONTROLS */}
+      {filteredProjects.length > 0 && (
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          {/* Info & Page size selector */}
+          <div className="text-slate-600 flex flex-wrap items-center gap-2">
+            <span>
+              Hiển thị{' '}
+              <strong className="text-slate-900 font-bold">
+                {(safeCurrentPage - 1) * pageSize + 1}
+              </strong>{' '}
+              -{' '}
+              <strong className="text-slate-900 font-bold">
+                {Math.min(safeCurrentPage * pageSize, filteredProjects.length)}
+              </strong>{' '}
+              trên tổng số{' '}
+              <strong className="text-blue-700 font-extrabold">{filteredProjects.length}</strong>{' '}
+              công trình
+            </span>
+
+            <div className="flex items-center gap-1 pl-2 sm:border-l border-slate-200 text-slate-500">
+              <span>Hiển thị:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 text-slate-800 font-bold text-xs outline-none focus:border-blue-600 cursor-pointer"
+              >
+                <option value={6}>6 công trình/trang</option>
+                <option value={9}>9 công trình/trang</option>
+                <option value={12}>12 công trình/trang</option>
+                <option value={24}>24 công trình/trang</option>
+                <option value={50}>50 công trình/trang</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Page Buttons */}
+          <div className="flex items-center gap-1 flex-wrap justify-center">
+            {/* First Page */}
+            <button
+              type="button"
+              id="proj-page-first-btn"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage(1)}
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white cursor-pointer"
+              title="Trang đầu"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+
+            {/* Prev Page */}
+            <button
+              type="button"
+              id="proj-page-prev-btn"
+              disabled={safeCurrentPage <= 1}
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white cursor-pointer flex items-center gap-1"
+              title="Trang trước"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Trước</span>
+            </button>
+
+            {/* Dynamic Page Numbers with Ellipsis */}
+            <div className="flex items-center gap-1 px-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => {
+                  return (
+                    p === 1 ||
+                    p === totalPages ||
+                    Math.abs(p - safeCurrentPage) <= 1
+                  );
+                })
+                .map((pageNum, idx, arr) => {
+                  const prevNum = arr[idx - 1];
+                  const showEllipsis = prevNum && pageNum - prevNum > 1;
+
+                  return (
+                    <React.Fragment key={pageNum}>
+                      {showEllipsis && (
+                        <span className="px-1 text-slate-400 select-none">...</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`min-w-8 h-8 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          safeCurrentPage === pageNum
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-700 hover:bg-slate-100 border border-slate-200 bg-white'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+            </div>
+
+            {/* Next Page */}
+            <button
+              type="button"
+              id="proj-page-next-btn"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white cursor-pointer flex items-center gap-1"
+              title="Trang sau"
+            >
+              <span className="hidden sm:inline">Sau</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Last Page */}
+            <button
+              type="button"
+              id="proj-page-last-btn"
+              disabled={safeCurrentPage >= totalPages}
+              onClick={() => setCurrentPage(totalPages)}
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white cursor-pointer"
+              title="Trang cuối"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
