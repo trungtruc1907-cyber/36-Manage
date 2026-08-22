@@ -1,6 +1,6 @@
 {
   "name": "Waterproofing 36",
-  "description": "Hệ thống quản lý thi công, kho vật tư, chấm công và nhân sự Waterproofing 36 với cơ sở dữ liệu độc lập.",
+  "description": "Hệ thống quản lý thi công, kho vật tư, chấm công, báo cáo tài chính và nhân sự Waterproofing 36.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

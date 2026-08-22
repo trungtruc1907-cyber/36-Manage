@@ -4,6 +4,7 @@ import {
   Compass,
   Archive,
   Users,
+  BarChart3,
   Settings,
   Plus,
   HelpCircle,
@@ -17,7 +18,7 @@ import {
 import { BrandLogo } from './BrandLogo';
 import { CompanySettings, UserAccount } from '../types';
 
-export type NavTab = 'dashboard' | 'projects' | 'materials' | 'staff' | 'settings';
+export type NavTab = 'dashboard' | 'projects' | 'materials' | 'staff' | 'reports' | 'settings';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -47,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'projects', label: 'Công trình', icon: <Compass className="w-5 h-5" /> },
     { id: 'materials', label: 'Vật tư', icon: <Archive className="w-5 h-5" /> },
     { id: 'staff', label: 'Nhân sự', icon: <Users className="w-5 h-5" /> },
+    { id: 'reports', label: 'Báo cáo', icon: <BarChart3 className="w-5 h-5" /> },
     { id: 'settings', label: 'Thiết lập', icon: <Settings className="w-5 h-5" /> },
   ];
 

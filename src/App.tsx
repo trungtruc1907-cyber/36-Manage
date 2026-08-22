@@ -69,6 +69,7 @@ import { DashboardView } from './components/DashboardView';
 import { ProjectsView } from './components/ProjectsView';
 import { MaterialsView } from './components/MaterialsView';
 import { StaffView } from './components/StaffView';
+import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
 import { NewProjectModal } from './components/NewProjectModal';
 import { NewExportModal } from './components/NewExportModal';
@@ -779,6 +780,7 @@ export default function App() {
                 {activeTab === 'projects' && 'Danh mục công trình'}
                 {activeTab === 'materials' && 'Vật tư & Định mức'}
                 {activeTab === 'staff' && 'Nhân sự & Thợ thi công'}
+                {activeTab === 'reports' && 'Báo cáo & Thống kê'}
                 {activeTab === 'settings' && 'Cấu hình hệ thống'}
               </h2>
             </div>
@@ -932,6 +934,18 @@ export default function App() {
               onDeleteLaborLog={handleDeleteLaborLog}
               onAddLaborLog={handleAddLaborLog}
               onOpenNewLaborLog={() => setIsLaborDetailOpen(true)}
+            />
+          )}
+
+          {activeTab === 'reports' && (
+            <ReportsView
+              projects={projects}
+              exportedGoods={exportedGoods}
+              laborLogs={laborLogs}
+              staff={staff}
+              companySettings={companySettings}
+              currentUser={currentUser}
+              onNavigateToProject={() => setActiveTab('projects')}
             />
           )}
 
